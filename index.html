@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flipfight</title>
+<meta name="description" content="Pixel art NFT card duels. Connect your wallet, build a deck and flip cards against real players.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+<div class="wrap">
+  <header class="frame top">
+    <div class="logo">
+      <canvas id="logoArt" width="12" height="12"></canvas>
+      <div><h1>FLIPFIGHT</h1><small>NFT card duels</small></div>
+    </div>
+    <div class="wallet" id="walletBar" hidden>
+      <span class="chip">DEMO TOKENS</span>
+      <button class="sfx" id="sfx" aria-pressed="true">SFX ON</button>
+      <div class="stat"><b class="num" id="bal">0</b><span>FLIP</span></div>
+      <div class="stat"><b class="num" id="elo">1200</b><span>ELO</span></div>
+      <div class="who"><b id="nick"></b><span id="addr"></span><button class="linkbtn" id="logout">Sign out</button></div>
+    </div>
+  </header>
+
+  <!-- LOGIN -->
+  <section id="login" hidden>
+    <div class="frame login">
+      <canvas id="loginArt" width="12" height="12"></canvas>
+      <h2>Flip cards. Beat real players.</h2>
+      <p>Connect MetaMask to sign in. New players get 200,000 demo FLIP, 12 starter cards and 2 free packs.</p>
+      <button class="btn" id="connect">Connect MetaMask</button>
+      <p class="err" id="loginErr" role="alert"></p>
+      <div class="facts"><span>FREE SIGNATURE</span><span>NO TRANSACTION</span><span>DEMO TOKENS ONLY</span></div>
+    </div>
+  </section>
+
+  <!-- NICKNAME -->
+  <section id="nickname" hidden>
+    <form class="frame login" id="nickForm">
+      <h2>Choose your nickname</h2>
+      <p>This is how other players and the leaderboard will see you. You can't change it later.</p>
+      <div class="field">
+        <label for="nickInput" class="note">3–16 letters, numbers or underscores</label>
+        <input id="nickInput" maxlength="16" autocomplete="off" spellcheck="false" placeholder="PixelDuelist">
+      </div>
+      <button class="btn" type="submit">Save nickname</button>
+      <p class="err" id="nickErr" role="alert"></p>
+    </form>
+  </section>
+
+  <nav class="tabs" role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="arena" aria-selected="true">ARENA</button>
+    <button role="tab" data-tab="collection" aria-selected="false">COLLECTION</button>
+    <button role="tab" data-tab="shop" aria-selected="false">SHOP</button>
+    <button role="tab" data-tab="ranks" aria-selected="false">RANKS</button>
+    <button role="tab" data-tab="history" aria-selected="false">HISTORY</button>
+  </nav>
+
+  <!-- ARENA -->
+  <section id="arena" hidden>
+    <div class="intro">
+      <h2>Choose a room</h2>
+      <p class="note" id="lobbyLine">Lock your entry · win 3 of 5 rounds · take the pot</p>
+    </div>
+    <div class="rooms" id="rooms"></div>
+    <div class="frame bonus" id="bonusBox" hidden>
+      <h3>DAILY BONUS READY</h3>
+      <button class="btn" id="claim">Claim 25,000 FLIP</button>
+    </div>
+    <details class="frame howto">
+      <summary>How to play</summary>
+      <div class="rules">
+        <div><h3>BLIND PICKS</h3><p>Both players lock a card, then both cards flip together.</p></div>
+        <div><h3>ELEMENTS +30%</h3><p class="cycle"><span class="e e-fire">FIRE</span>›<span class="e e-wind">WIND</span>›<span class="e e-earth">EARTH</span>›<span class="e e-water">WATER</span>›<span class="e e-fire">FIRE</span></p></div>
+        <div><h3>15 ENERGY</h3><p>A card you can't afford still plays, at half power.</p></div>
+        <div><h3>20 SECONDS</h3><p>No pick in time? A random card plays for you.</p></div>
+      </div>
+    </details>
+  </section>
+
+  <!-- DECK -->
+  <section id="deck" hidden>
+    <div class="row between">
+      <div><h2 id="deckTitle">Build your deck</h2><p class="note" id="deckSub"></p></div>
+      <button class="btn ghost" id="backLobby">‹ Rooms</button>
+    </div>
+    <div class="frame tray">
+      <div class="meter"><span>Cards picked</span><b class="num" id="mCount">0 / 5</b><div class="bar"><i id="bCount"></i></div></div>
+      <div class="meter"><span>Deck power / room cap</span><b class="num" id="mPow">0</b><div class="bar"><i id="bPow"></i></div></div>
+      <div class="meter"><span>Energy cost / 15</span><b class="num" id="mEn">0</b><div class="bar"><i id="bEn"></i></div></div>
+    </div>
+    <p class="note" id="deckHint"></p>
+    <div class="cards" id="pickGrid"></div>
+    <div class="row">
+      <button class="btn" id="enter" disabled>Find opponent</button>
+      <p class="note" id="enterNote"></p>
+    </div>
+  </section>
+
+  <!-- QUEUE -->
+  <section id="queue" hidden>
+    <div class="frame search">
+      <canvas class="radar" id="radar" width="24" height="24"></canvas>
+      <h2 id="searchTitle">Finding an opponent</h2>
+      <p class="note" id="queueNote"></p>
+      <button class="btn ghost" id="cancelQueue">Cancel and refund</button>
+    </div>
+  </section>
+
+  <!-- MATCH -->
+  <section id="match" hidden>
+    <div class="frame board">
+      <div class="bhead">
+        <span class="rnd" id="rnd">ROUND 1/5</span>
+        <span class="pot num" id="pot"></span>
+        <span class="timer num" id="timer"></span>
+      </div>
+      <div class="duel">
+        <div class="side" id="oppSide"></div>
+        <div class="score num" id="score">0 : 0</div>
+        <div class="side me" id="mySide"></div>
+      </div>
+      <div class="slots">
+        <div id="oppSlot"></div>
+        <div id="mySlot"></div>
+      </div>
+      <div class="outcome"><span class="verdict" id="verdict"></span><span class="calc" id="calc"></span></div>
+    </div>
+    <div class="cards hand" id="hand"></div>
+    <div class="row" style="justify-content:center">
+      <button class="btn" id="lock" disabled>Lock card</button>
+    </div>
+    <p class="note" id="lockNote" style="text-align:center">Pick a card.</p>
+    <details class="logbox"><summary>Match log</summary><div class="log" id="log"></div></details>
+  </section>
+
+  <!-- RESULT -->
+  <section id="result" hidden>
+    <div class="frame result">
+      <canvas class="radar" id="resArt" width="12" height="12"></canvas>
+      <div class="big" id="resTitle"></div>
+      <p class="muted" id="resSub"></p>
+      <dl class="ledger" id="ledger"></dl>
+      <div class="row" style="justify-content:center">
+        <button class="btn" id="again">Play again</button>
+        <button class="btn ghost" id="toLobby">Back to rooms</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLLECTION -->
+  <section id="collection" hidden>
+    <div class="frame collstats" id="collStats"></div>
+    <div class="filters" id="filters"></div>
+    <div class="cards" id="collGrid"></div>
+  </section>
+
+  <!-- SHOP -->
+  <section id="shop" hidden>
+    <div class="packs" id="packs"></div>
+    <div class="frame reveal" id="reveal" hidden>
+      <h2 id="revealTitle">Opening pack…</h2>
+      <div class="cards" id="revealCards"></div>
+      <p class="note" id="revealNote"></p>
+    </div>
+  </section>
+
+  <!-- RANKS -->
+  <section id="ranks" hidden>
+    <div class="row between"><h2>Season 1 leaderboard</h2><div class="statline" id="rankStats"></div></div>
+    <div class="frame tblwrap" id="rankWrap"></div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="history" hidden>
+    <h2>Your last matches</h2>
+    <div class="frame tblwrap" id="histWrap"></div>
+  </section>
+
+  <footer>Target network: Robinhood Chain (EVM L2). Tokens and cards are demo assets stored on this server. Nothing is sent on-chain.</footer>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.0/dist/socket.io.min.js"></script>
+<script src="/config.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
