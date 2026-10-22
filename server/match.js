@@ -1,15 +1,18 @@
 const crypto = require('crypto');
 
 // Matchmaking queues and the server-authoritative match engine.
-function createMatchmaker({ io, db, q, G, addStat, validateDeck, publicProfile }) {
+// Live match state is kept in memory; balances, ELO and results are written to the database.
+function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
   const sockets = new Map();   // userId -> socket
   const queues = new Map(G.ROOMS.map(r => [r.id, []])); // roomId -> [{userId, cards, at}]
   const userQueue = new Map(); // userId -> roomId
   const matches = new Map();   // matchId -> match
   const userMatch = new Map(); // userId -> matchId
+  const busy = new Set();      // users with a queue request in flight
 
   const emitTo = (userId, ev, data) => { const s = sockets.get(userId); if (s) s.emit(ev, data); };
   const cost = c => G.RARITIES[c.rar].cost;
+  const log = err => console.error(err);
 
   function broadcastLobby() {
     const waiting = {};
@@ -18,29 +21,33 @@ function createMatchmaker({ io, db, q, G, addStat, validateDeck, publicProfile }
   }
 
   // ---------- queue ----------
-  function joinQueue(userId, roomId) {
+  async function joinQueue(userId, roomId) {
+    if (busy.has(userId)) throw new Error('Please wait a moment.');
     if (userMatch.has(userId)) throw new Error('You are already in a match.');
     if (userQueue.has(userId)) throw new Error('You are already searching for a match.');
-    const deckRow = db.prepare('SELECT card_uids FROM decks WHERE user_id = ? AND room_id = ?').get(userId, roomId);
-    if (!deckRow) throw new Error('Build a deck for this room first.');
-    const { room, cards } = validateDeck(userId, roomId, JSON.parse(deckRow.card_uids));
-    if (!q.spendBalance.run(room.stake, userId, room.stake).changes) throw new Error('Not enough FLIP for this room.');
-    queues.get(roomId).push({ userId, cards, at: Date.now() });
-    userQueue.set(userId, roomId);
-    tryPair(roomId);
-    broadcastLobby();
-    return room;
+    busy.add(userId);
+    try {
+      const deckRow = await q.deckOf(userId, roomId);
+      if (!deckRow) throw new Error('Build a deck for this room first.');
+      const { room, cards } = await validateDeck(userId, roomId, JSON.parse(deckRow.card_uids));
+      if (!(await q.spendBalance(userId, room.stake))) throw new Error('Not enough FLIP for this room.');
+      queues.get(roomId).push({ userId, cards, at: Date.now() });
+      userQueue.set(userId, roomId);
+      broadcastLobby();
+      tryPair(roomId);
+      return room;
+    } finally { busy.delete(userId); }
   }
 
-  function leaveQueue(userId, refund = true) {
+  async function leaveQueue(userId) {
     const roomId = userQueue.get(userId);
     if (roomId === undefined) return false;
     const list = queues.get(roomId);
     const i = list.findIndex(e => e.userId === userId);
     if (i >= 0) list.splice(i, 1);
     userQueue.delete(userId);
-    if (refund) q.addBalance.run(G.ROOMS.find(r => r.id === roomId).stake, userId);
     broadcastLobby();
+    await q.addBalance(userId, G.ROOMS.find(r => r.id === roomId).stake); // refund the escrowed entry
     return true;
   }
 
@@ -51,20 +58,27 @@ function createMatchmaker({ io, db, q, G, addStat, validateDeck, publicProfile }
       const bi = list.findIndex(e => e.userId !== a.userId);
       if (bi < 0) { list.unshift(a); return; }
       const [b] = list.splice(bi, 1);
+      // reserve both players before any await so nobody can be paired twice
+      const id = crypto.randomUUID();
       userQueue.delete(a.userId); userQueue.delete(b.userId);
-      startMatch(G.ROOMS.find(r => r.id === roomId), a, b);
+      userMatch.set(a.userId, id); userMatch.set(b.userId, id);
+      startMatch(id, G.ROOMS.find(r => r.id === roomId), a, b).catch(err => {
+        log(err);
+        // could not start: refund both entries
+        [a, b].forEach(p => { userMatch.delete(p.userId); q.addBalance(p.userId, G.ROOMS.find(r => r.id === roomId).stake).catch(log); emitTo(p.userId, 'match:error', { error: 'Could not start the match. Your entry was refunded.' }); });
+      });
     }
   }
 
   // ---------- match engine ----------
-  function startMatch(room, a, b) {
-    const mk = e => {
-      const u = q.userById.get(e.userId);
+  async function startMatch(id, room, a, b) {
+    const mk = async e => {
+      const u = await q.userById(e.userId);
       return { userId: u.id, nickname: u.nickname, elo: u.elo, hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
     };
-    const m = { id: crypto.randomUUID(), room, players: [mk(a), mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [] };
+    const m = { id, room, players: [await mk(a), await mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [] };
     matches.set(m.id, m);
-    m.players.forEach(p => userMatch.set(p.userId, m.id));
+    broadcastLobby();
     startRound(m);
   }
 
@@ -138,7 +152,7 @@ function createMatchmaker({ io, db, q, G, addStat, validateDeck, publicProfile }
     emitState(m);
     const over = m.players.some(p => p.wins >= G.MATCH.winsNeeded) || m.log.length >= G.MATCH.rounds;
     m.timer = setTimeout(() => {
-      if (over) finishMatch(m);
+      if (over) finishMatch(m).catch(log);
       else { m.round++; startRound(m); }
     }, G.MATCH.revealMs);
   }
@@ -148,7 +162,7 @@ function createMatchmaker({ io, db, q, G, addStat, validateDeck, publicProfile }
     return Math.round(32 * (score - expected));
   }
 
-  function finishMatch(m) {
+  async function finishMatch(m) {
     m.phase = 'done';
     const [p1, p2] = m.players;
     const winnerIdx = p1.wins > p2.wins ? 0 : p2.wins > p1.wins ? 1 : null;
@@ -156,37 +170,37 @@ function createMatchmaker({ io, db, q, G, addStat, validateDeck, publicProfile }
     const rake = winnerIdx === null ? 0 : Math.round(pot * m.room.rake);
     const s1 = winnerIdx === null ? 0.5 : winnerIdx === 0 ? 1 : 0;
     const d1 = eloDelta(p1.elo, p2.elo, s1), d2 = eloDelta(p2.elo, p1.elo, 1 - s1);
+    const col = s => (s === 1 ? 'wins' : s === 0 ? 'losses' : 'draws');
 
-    db.transaction(() => {
+    await db.tx(async c => {
       if (winnerIdx === null) {
-        q.addBalance.run(stake, p1.userId); q.addBalance.run(stake, p2.userId);
+        await q.addBalance(p1.userId, stake, c); await q.addBalance(p2.userId, stake, c);
       } else {
-        q.addBalance.run(pot - rake, m.players[winnerIdx].userId);
-        addStat('burned', rake * G.ECONOMY.feeSplit.burn);
-        addStat('treasury', rake * G.ECONOMY.feeSplit.treasury);
-        addStat('season', rake * G.ECONOMY.feeSplit.season);
+        await q.addBalance(m.players[winnerIdx].userId, pot - rake, c);
+        await db.addStat('burned', rake * G.ECONOMY.feeSplit.burn, c);
+        await db.addStat('treasury', rake * G.ECONOMY.feeSplit.treasury, c);
+        await db.addStat('season', rake * G.ECONOMY.feeSplit.season, c);
       }
-      const col = s => (s === 1 ? 'wins' : s === 0 ? 'losses' : 'draws');
-      db.prepare(`UPDATE users SET elo = MAX(100, elo + ?), ${col(s1)} = ${col(s1)} + 1 WHERE id = ?`).run(d1, p1.userId);
-      db.prepare(`UPDATE users SET elo = MAX(100, elo + ?), ${col(1 - s1)} = ${col(1 - s1)} + 1 WHERE id = ?`).run(d2, p2.userId);
-      db.prepare(`INSERT INTO matches(id, room_id, p1, p2, winner_id, p1_wins, p2_wins, stake, rake, p1_elo_delta, p2_elo_delta, created_at)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-        m.id, m.room.id, p1.userId, p2.userId, winnerIdx === null ? null : m.players[winnerIdx].userId,
-        p1.wins, p2.wins, stake, rake, d1, d2, Date.now());
-    })();
+      await db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(s1)} = ${col(s1)} + 1 WHERE id = $2`, [d1, p1.userId], c);
+      await db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(1 - s1)} = ${col(1 - s1)} + 1 WHERE id = $2`, [d2, p2.userId], c);
+      await db.query(`INSERT INTO matches(id, room_id, p1, p2, winner_id, p1_wins, p2_wins, stake, rake, p1_elo_delta, p2_elo_delta, created_at)
+                      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [m.id, m.room.id, p1.userId, p2.userId, winnerIdx === null ? null : m.players[winnerIdx].userId,
+         p1.wins, p2.wins, stake, rake, d1, d2, Date.now()], c);
+    });
 
-    m.players.forEach((p, i) => {
-      const op = m.players[1 - i];
+    for (let i = 0; i < 2; i++) {
+      const p = m.players[i], op = m.players[1 - i];
       const out = winnerIdx === null ? 'draw' : winnerIdx === i ? 'win' : 'loss';
-      const u = q.userById.get(p.userId);
+      const u = await q.userById(p.userId);
+      userMatch.delete(p.userId);
       emitTo(p.userId, 'match:end', {
         matchId: m.id, out, myWins: p.wins, oppWins: op.wins, opponent: op.nickname, room: m.room.name,
         stake, pot, rake, net: out === 'win' ? pot - rake - stake : out === 'loss' ? -stake : 0,
         split: { burn: rake * G.ECONOMY.feeSplit.burn, treasury: rake * G.ECONOMY.feeSplit.treasury, season: rake * G.ECONOMY.feeSplit.season },
         eloDelta: i === 0 ? d1 : d2, profile: publicProfile(u),
       });
-      userMatch.delete(p.userId);
-    });
+    }
     matches.delete(m.id);
     broadcastLobby();
   }
@@ -198,31 +212,30 @@ function createMatchmaker({ io, db, q, G, addStat, validateDeck, publicProfile }
     if (prev && prev !== socket) { prev.emit('session:replaced'); prev.disconnect(true); }
     sockets.set(userId, socket);
 
-    const ack = (fn, work) => {
-      try { const r = work(); if (typeof fn === 'function') fn({ ok: true, ...r }); }
-      catch (e) { if (typeof fn === 'function') fn({ ok: false, error: e.message }); }
-    };
+    const handle = (fn, work) => Promise.resolve().then(work)
+      .then(r => { if (typeof fn === 'function') fn({ ok: true, ...r }); })
+      .catch(e => { if (typeof fn === 'function') fn({ ok: false, error: e.message || 'Request failed.' }); });
 
-    socket.on('queue:join', (data, fn) => ack(fn, () => {
-      const room = joinQueue(userId, Number(data && data.roomId));
-      return { room: room.id, profile: publicProfile(q.userById.get(userId)), matched: userMatch.has(userId) };
+    socket.on('queue:join', (data, fn) => handle(fn, async () => {
+      const room = await joinQueue(userId, Number(data && data.roomId));
+      return { room: room.id, profile: publicProfile(await q.userById(userId)), matched: userMatch.has(userId) };
     }));
-    socket.on('queue:leave', (data, fn) => ack(fn, () => {
-      leaveQueue(userId, true);
-      return { profile: publicProfile(q.userById.get(userId)) };
+    socket.on('queue:leave', (data, fn) => handle(fn, async () => {
+      await leaveQueue(userId);
+      return { profile: publicProfile(await q.userById(userId)) };
     }));
-    socket.on('match:pick', (data, fn) => ack(fn, () => { pick(userId, String(data && data.matchId), Number(data && data.uid)); return {}; }));
+    socket.on('match:pick', (data, fn) => handle(fn, () => { pick(userId, String(data && data.matchId), Number(data && data.uid)); return {}; }));
 
     socket.on('disconnect', () => {
       if (sockets.get(userId) !== socket) return;
       sockets.delete(userId);
-      leaveQueue(userId, true); // never leave a ghost in the queue
-      broadcastLobby();         // an active match keeps running; timeouts auto-play for an absent player
+      leaveQueue(userId).catch(log); // never leave a ghost in the queue
+      broadcastLobby();               // an active match keeps running; timeouts auto-play for an absent player
     });
 
-    // resume an active match after a reload
     const mid = userMatch.get(userId);
-    if (mid) { const m = matches.get(mid); emitTo(userId, 'match:state', viewFor(m, m.players.findIndex(p => p.userId === userId))); }
+    const m = mid && matches.get(mid);
+    if (m) emitTo(userId, 'match:state', viewFor(m, m.players.findIndex(p => p.userId === userId)));
     broadcastLobby();
   }
 

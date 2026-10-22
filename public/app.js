@@ -240,6 +240,7 @@ function connectSocket() {
   s.on('lobby', l => { S.lobby = l; if (current === 'arena') renderRooms(); if (current === 'queue') renderQueueNote(); });
   s.on('match:state', onMatchState);
   s.on('match:end', onMatchEnd);
+  s.on('match:error', e => { clearInterval(radarT); S.match = null; lockTabs(false); toast(e.error); refreshMe().catch(() => {}).then(() => setTab('arena')); });
   s.on('session:replaced', () => { S.socket = null; toast('You opened Flipfight in another tab. This tab is now paused.'); });
 }
 function emit(ev, data) {

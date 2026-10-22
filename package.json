@@ -8,12 +8,14 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "better-sqlite3": "^11.3.0",
     "dotenv": "^16.4.5",
     "ethers": "^6.13.2",
     "express": "^4.21.0",
+    "pg": "^8.23.1",
     "socket.io": "^4.8.0"
   },
   "devDependencies": {
