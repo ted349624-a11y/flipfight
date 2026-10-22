@@ -1,0 +1,22 @@
+{
+  "name": "flipfight",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Flipfight: pixel art NFT card duels with wallet sign-in and real-time PvP (demo tokens)",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.2",
+    "express": "^4.21.0",
+    "socket.io": "^4.8.0"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.0"
+  }
+}
