@@ -163,6 +163,10 @@ function atmosphere(id) {
   if (['deck', 'queue', 'match'].includes(id) && roomId != null) FX.scene(roomScene(roomId));
   else if (id !== 'result') FX.scene('night');
   if (id !== 'match') FX.music('lobby');
+  // the island itself is the backdrop of every screen: the camera rests on the building you are in
+  const focus = { arena: 'arena', deck: 'arena', queue: 'arena', match: 'arena', result: 'arena', collection: 'collection', forge: 'forge', market: 'market', shop: 'shop', ranks: 'ranks', history: 'history' }[id] || 'plaza';
+  const mood = ['deck', 'queue', 'match', 'result'].includes(id) && roomId != null ? ({ 2: 'volcano', 3: 'temple' }[roomId] || 'calm') : 'calm';
+  if (id === 'island') Island.backdropOff(); else Island.backdrop(focus, mood);
   FX.ambient(id === 'forge' ? 'forge' : id === 'market' ? 'market' : null);
 }
 // The guide opens by itself for players who haven't finished a match yet.

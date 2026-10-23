@@ -22,6 +22,8 @@ body{
   -webkit-font-smoothing:none;
 }
 #bg{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;z-index:-1;pointer-events:none}
+.island-backdrop{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;z-index:-1;pointer-events:none}
+.island-backdrop:not([hidden])~#bg,.island-backdrop:not([hidden])~* #bg{display:none}
 .wrap{position:relative}
 .intro{display:flex;flex-direction:column;gap:8px;padding-top:8px}
 .intro h2{font-size:18px}
@@ -519,3 +521,8 @@ body.on-island{overflow:hidden}
   box-shadow:0 0 0 2px #1a1426,inset 0 0 0 2px rgba(255,255,255,.08),0 4px 0 2px rgba(0,0,0,.35)}
 @media (max-width:420px){.emotes button{padding:9px 8px;font-size:9px}.hud-chip,.hud-btn{font-size:9px;padding:8px 9px}}
 nav.tabs button.tab-island{color:var(--gold)}
+
+/* a glass column over the island backdrop keeps every screen readable */
+body:not(.on-island) .wrap::before{content:"";position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,1064px);z-index:-1;pointer-events:none;
+  background:rgba(16,13,30,.66);border-inline:4px solid rgba(61,54,104,.55)}
+@media (max-width:700px){body:not(.on-island) .wrap::before{border-inline:0;background:rgba(16,13,30,.6)}}

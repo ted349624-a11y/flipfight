@@ -611,21 +611,16 @@ function waterFx(c, t, x0, y0, x1, y1) {
     }
   }
 }
-function render(now) {
-  const c = I.ctx, vw = I.vw, vh = I.vh, me = I.me, t = reduced ? 0 : now / 1000;
-  const tx = Math.max(0, Math.min(WW - vw, me.x - vw / 2)), ty = Math.max(0, Math.min(WH - vh, me.y - vh / 2));
-  I.cam.x += (tx - I.cam.x) * .15; I.cam.y += (ty - I.cam.y) * .15;
-  if (WW < vw) I.cam.x = (WW - vw) / 2; if (WH < vh) I.cam.y = (WH - vh) / 2;
-  const cx = Math.round(I.cam.x), cy = Math.round(I.cam.y);
+// Draws the world (tiles, water, props, buildings, characters, lighting) into view V.
+// V = { c, L, light, vw, vh, cx, cy, chars, flies, glowAt?, night? }
+function renderWorld(now, V) {
+  const { c, vw, vh, cx, cy, chars } = V, t = reduced ? 0 : now / 1000;
   c.fillStyle = P.deep; c.fillRect(0, 0, vw, vh);
   c.drawImage(ground, Math.max(0, cx), Math.max(0, cy), vw, vh, Math.max(0, -cx), Math.max(0, -cy), vw, vh);
   c.save(); c.translate(-cx, -cy);
   const x0 = Math.floor(cx / T) - 1, y0 = Math.floor(cy / T) - 1, x1 = x0 + Math.ceil(vw / T) + 2, y1 = y0 + Math.ceil(vh / T) + 2;
   waterFx(c, t, x0, y0, x1, y1);
   // depth-sorted scene: props, buildings, players
-  const chars = [];
-  I.others.forEach(o => { o.x += (o.tx - o.x) * .2; o.y += (o.ty - o.y) * .2; o.anim = o.moving ? o.anim + .12 : 0; chars.push(o); });
-  chars.push(me);
   const items = sortables.filter(s => s.x < cx + vw + 40 && s.x + s.img.width > cx - 40 && s.y < cy + vh + 40 && s.y + s.img.height > cy - 60);
   chars.forEach(p => items.push({ char: p, base: p.y }));
   items.sort((a, b) => a.base - b.base);
@@ -638,14 +633,15 @@ function render(now) {
     for (let i = 0; i < 7; i++) { const ph = (t * .35 + i / 7) % 1; const s = 2 + Math.floor(ph * 4); c.fillStyle = `rgba(120,110,140,${.6 * (1 - ph)})`; c.fillRect((fb.x + fb.w) * T - 16 + Math.round(Math.sin(t * .8 + i) * 6 * ph), fb.y * T - 44 - ph * 50, s, s); }
   }
   // fireflies
+  const flies = V.flies;
   if (!reduced) {
-    if (I.flies.length < 26) I.flies.push({ x: cx + Math.random() * vw, y: cy + Math.random() * vh, ph: Math.random() * 6, vx: (Math.random() - .5) * .3, vy: (Math.random() - .5) * .2 });
-    I.flies.forEach(f => { f.ph += .05; f.x += f.vx + Math.sin(f.ph) * .15; f.y += f.vy + Math.cos(f.ph * .7) * .1; if (f.x < cx - 20 || f.x > cx + vw + 20 || f.y < cy - 20 || f.y > cy + vh + 20) { f.x = cx + Math.random() * vw; f.y = cy + Math.random() * vh; } });
+    if (flies.length < 26) flies.push({ x: cx + Math.random() * vw, y: cy + Math.random() * vh, ph: Math.random() * 6, vx: (Math.random() - .5) * .3, vy: (Math.random() - .5) * .2 });
+    flies.forEach(f => { f.ph += .05; f.x += f.vx + Math.sin(f.ph) * .15; f.y += f.vy + Math.cos(f.ph * .7) * .1; if (f.x < cx - 20 || f.x > cx + vw + 20 || f.y < cy - 20 || f.y > cy + vh + 20) { f.x = cx + Math.random() * vw; f.y = cy + Math.random() * vh; } });
   }
   c.restore();
   // night lighting: multiply by a light map, then add glows
-  const L = I.lctx;
-  L.globalCompositeOperation = 'source-over'; L.fillStyle = '#8487c4'; L.fillRect(0, 0, vw, vh);
+  const L = V.L;
+  L.globalCompositeOperation = 'source-over'; L.fillStyle = V.night || '#8487c4'; L.fillRect(0, 0, vw, vh);
   L.globalCompositeOperation = 'lighter';
   const glow = (x, y, r, col, a) => { const g = L.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${a})`); g.addColorStop(.55, `rgba(${col[0]},${col[1]},${col[2]},${a * .45})`); g.addColorStop(1, 'rgba(0,0,0,0)'); L.fillStyle = g; L.fillRect(x - r, y - r, r * 2, r * 2); };
   for (const l of lights) {
@@ -653,20 +649,37 @@ function render(now) {
     const fl = l.flicker ? 1 - l.flicker + Math.sin(t * 13 + l.x) * l.flicker * .6 + Math.sin(t * 7.3 + l.y) * l.flicker * .4 : 1;
     glow(x, y, l.r * fl, l.c, .75);
   }
-  glow(me.x - cx, me.y - cy - 8, 40, [180, 170, 220], .35); // a little light around you
-  if (!reduced) I.flies.forEach(f => { const x = f.x - cx, y = f.y - cy; if (Math.sin(f.ph * 2) > 0) glow(x, y, 7, [200, 255, 120], .5); });
-  c.globalCompositeOperation = 'multiply'; c.drawImage(I.light, 0, 0);
+  if (V.glowAt) glow(V.glowAt.x - cx, V.glowAt.y - cy - 8, 40, [180, 170, 220], .35); // a little light around you
+  if (!reduced) flies.forEach(f => { const x = f.x - cx, y = f.y - cy; if (Math.sin(f.ph * 2) > 0) glow(x, y, 7, [200, 255, 120], .5); });
+  c.globalCompositeOperation = 'multiply'; c.drawImage(V.light, 0, 0);
   c.globalCompositeOperation = 'source-over';
-  // things that glow on top of the darkness
   c.save(); c.translate(-cx, -cy);
-  if (!reduced) I.flies.forEach(f => { if (Math.sin(f.ph * 2) > 0) px(c, '#e8ff9a', Math.round(f.x), Math.round(f.y)); });
+  if (!reduced) flies.forEach(f => { if (Math.sin(f.ph * 2) > 0) px(c, '#e8ff9a', Math.round(f.x), Math.round(f.y)); });
+  c.restore();
+}
+function drawSign(c, b) {
+  const sx = b.door.x, sy = b.y * T - b.up + (b.board ? 14 : 6);
+  const w = Math.round(c.measureText(b.label).width + 10);
+  px(c, OUT, sx - w / 2 - 1, sy - 12, w + 2, 16); px(c, '#2a2240', sx - w / 2, sy - 11, w, 14); px(c, b.sign, sx - w / 2, sy + 2, w, 1);
+  c.fillStyle = b.sign; c.fillText(b.label, sx, sy);
+}
+function render(now) {
+  const c = I.ctx, vw = I.vw, vh = I.vh, me = I.me;
+  const tx = Math.max(0, Math.min(WW - vw, me.x - vw / 2)), ty = Math.max(0, Math.min(WH - vh, me.y - vh / 2));
+  I.cam.x += (tx - I.cam.x) * .15; I.cam.y += (ty - I.cam.y) * .15;
+  if (WW < vw) I.cam.x = (WW - vw) / 2; if (WH < vh) I.cam.y = (WH - vh) / 2;
+  const cx = Math.round(I.cam.x), cy = Math.round(I.cam.y);
+  const chars = [];
+  I.others.forEach(o => { o.x += (o.tx - o.x) * .2; o.y += (o.ty - o.y) * .2; o.anim = o.moving ? o.anim + .12 : 0; chars.push(o); });
+  chars.push(me);
+  renderWorld(now, { c, L: I.lctx, light: I.light, vw, vh, cx, cy, chars, flies: I.flies, glowAt: me });
+  // signs, names and bubbles stay readable on top of the darkness
+  c.save(); c.translate(-cx, -cy);
   c.font = '8px "Press Start 2P", monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
   BUILDINGS.forEach(b => {
-    const sx = b.door.x, sy = b.y * T - b.up + (b.board ? 14 : 6);
-    if (sx < cx - 60 || sx > cx + vw + 60 || sy < cy - 20 || sy > cy + vh + 30) return;
-    const w = Math.round(c.measureText(b.label).width + 10);
-    px(c, OUT, sx - w / 2 - 1, sy - 12, w + 2, 16); px(c, '#2a2240', sx - w / 2, sy - 11, w, 14); px(c, b.sign, sx - w / 2, sy + 2, w, 1);
-    c.fillStyle = b.sign; c.fillText(b.label, sx, sy);
+    const sx = b.door.x, sy = b.y * T - b.up;
+    if (sx < cx - 60 || sx > cx + vw + 60 || sy < cy - 30 || sy > cy + vh + 30) return;
+    drawSign(c, b);
     if (Math.hypot(me.x - b.door.x, me.y - b.door.y) < 48 && (reduced || Math.floor(now / 350) % 2)) { // door hint arrow
       px(c, b.sign, b.door.x - 3, b.door.y - 10, 7, 1); px(c, b.sign, b.door.x - 2, b.door.y - 9, 5, 1); px(c, b.sign, b.door.x - 1, b.door.y - 8, 3, 1); px(c, b.sign, b.door.x, b.door.y - 7, 1, 1);
     }
@@ -686,6 +699,93 @@ function render(now) {
   if (I.path.length && !reduced) { const g = I.path[I.path.length - 1], r = 3 + (Math.floor(now / 140) % 3); c.strokeStyle = '#ffcc33'; c.lineWidth = 1; c.strokeRect(Math.round(g.x - r) + .5, Math.round(g.y - r / 2) + .5, r * 2, r); }
   c.restore();
 }
+
+// ---------- backdrop: the island behind every other screen ----------
+// The camera rests on the building you are in (it drifts a little), a few islanders stroll around,
+// and a mood colours the light: 'volcano' for room 2, 'temple' for room 3.
+const MOODS = {
+  calm: { night: '#8487c4', wash: 'rgba(12,9,28,.3)' },
+  volcano: { night: '#a86a6a', wash: 'rgba(40,8,8,.3)', embers: true },
+  temple: { night: '#7c95c8', wash: 'rgba(8,16,40,.3)', sparks: true },
+};
+const BD = { canvas: null, ctx: null, light: null, lctx: null, focus: 'plaza', mood: 'calm', vw: 0, vh: 0, scale: 3, cam: null, flies: [], parts: [], npcs: [], raf: 0, last: 0, on: false };
+function focusPoint(id) {
+  const b = BUILDINGS.find(x => x.id === id);
+  return b ? { x: b.door.x, y: b.door.y - b.h * T * .45 } : { x: PLAZA_C.x * T, y: PLAZA_C.y * T + 8 };
+}
+function bdResize() {
+  if (!BD.canvas) return;
+  const cssW = innerWidth, cssH = innerHeight;
+  BD.scale = Math.max(2, Math.min(4, Math.round(Math.min(cssW / (T * 26), cssH / (T * 18)))));
+  BD.vw = Math.ceil(cssW / BD.scale); BD.vh = Math.ceil(cssH / BD.scale);
+  BD.canvas.width = BD.vw; BD.canvas.height = BD.vh; BD.light.width = BD.vw; BD.light.height = BD.vh;
+  BD.ctx.imageSmoothingEnabled = false;
+}
+// a handful of islanders who wander between the buildings
+const NPC_ADDR = ['0x7a31c9e2b4d8', '0x13f0aa51c7e9', '0xc84e2290f1b3', '0x5be71d03a9c6', '0x9d2c64f8e017', '0x2f8b3ea6c4d1'];
+function npcTick(n, dt) {
+  if (!n.path.length) {
+    if ((n.wait -= dt) > 0) { n.moving = false; n.anim = 0; return; }
+    const pick = Math.random() < .7 ? BUILDINGS[Math.floor(Math.random() * BUILDINGS.length)].door : { x: PLAZA_C.x * T + (Math.random() - .5) * 90, y: (PLAZA_C.y + 3) * T + (Math.random() - .5) * 30 };
+    n.path = findPath(n.x, n.y, pick.x, pick.y + 10); n.wait = 1.5 + Math.random() * 4;
+    if (!n.path.length) return;
+  }
+  const wp = n.path[0], dx = wp.x - n.x, dy = wp.y - n.y, d = Math.hypot(dx, dy);
+  if (d < 2) { n.path.shift(); return; }
+  const v = SPEED * .55 * dt; n.x += dx / d * Math.min(v, d); n.y += dy / d * Math.min(v, d);
+  n.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : 2) : (dy < 0 ? 3 : 0); n.moving = true; n.anim += dt * 6;
+}
+function bdLoop(now) {
+  if (!BD.on) return;
+  BD.raf = requestAnimationFrame(bdLoop);
+  if (document.hidden || now - BD.last < 45) return; // ~22 fps is plenty for a backdrop
+  const dt = Math.min(.1, (now - (BD.last || now)) / 1000); BD.last = now;
+  const m = MOODS[BD.mood] || MOODS.calm, f = focusPoint(BD.focus), t = reduced ? 0 : now / 1000;
+  const want = { x: f.x - BD.vw / 2 + Math.sin(t * .07) * 18, y: f.y - BD.vh * .42 + Math.cos(t * .05) * 10 };
+  want.x = Math.max(0, Math.min(WW - BD.vw, want.x)); want.y = Math.max(0, Math.min(WH - BD.vh, want.y));
+  if (WW < BD.vw) want.x = (WW - BD.vw) / 2; if (WH < BD.vh) want.y = (WH - BD.vh) / 2;
+  if (!BD.cam) BD.cam = { ...want };
+  BD.cam.x += (want.x - BD.cam.x) * .06; BD.cam.y += (want.y - BD.cam.y) * .06;
+  if (!reduced) BD.npcs.forEach(n => npcTick(n, dt));
+  const c = BD.ctx, cx = Math.round(BD.cam.x), cy = Math.round(BD.cam.y), vw = BD.vw, vh = BD.vh;
+  renderWorld(now, { c, L: BD.lctx, light: BD.light, vw, vh, cx, cy, chars: BD.npcs, flies: BD.flies, night: m.night });
+  c.save(); c.translate(-cx, -cy);
+  c.font = '8px "Press Start 2P", monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  const b = BUILDINGS.find(x => x.id === BD.focus); if (b) drawSign(c, b);
+  c.restore();
+  // mood particles in screen space
+  if (!reduced) {
+    const ps = BD.parts;
+    if (m.embers && Math.random() < .6) ps.push({ k: 'e', x: Math.random() * vw, y: vh + 2, vx: (Math.random() - .5) * .4, vy: -(.4 + Math.random() * .8), life: 90 + Math.random() * 120 });
+    if (m.sparks && Math.random() < .25) ps.push({ k: 's', x: Math.random() * vw, y: Math.random() * vh, life: 18 + Math.random() * 20, ph: 0 });
+    for (let i = ps.length - 1; i >= 0; i--) {
+      const p = ps[i]; if (--p.life <= 0 || p.y < -4) { ps.splice(i, 1); continue; }
+      if (p.k === 'e') { p.x += p.vx + Math.sin(p.life * .1) * .2; p.y += p.vy; px(c, p.life > 80 ? '#ffd166' : p.life > 30 ? '#ff6b35' : '#a8331b', p.x, p.y); }
+      else { p.ph++; if (p.ph % 6 < 3) { px(c, '#ffe28a', p.x, p.y); if (p.ph % 12 < 3) { px(c, '#ffe28a', p.x - 1, p.y, 3, 1); px(c, '#ffe28a', p.x, p.y - 1, 1, 3); } } }
+    }
+  }
+  // darken and vignette so panels on top stay easy to read
+  c.fillStyle = m.wash; c.fillRect(0, 0, vw, vh);
+  const g = c.createRadialGradient(vw / 2, vh * .45, Math.min(vw, vh) * .3, vw / 2, vh * .45, Math.max(vw, vh) * .75);
+  g.addColorStop(0, 'rgba(8,6,18,0)'); g.addColorStop(1, 'rgba(8,6,18,.55)'); c.fillStyle = g; c.fillRect(0, 0, vw, vh);
+}
+function backdrop(focus, mood = 'calm') {
+  if (!ground) buildStatic();
+  if (!BD.canvas) {
+    BD.canvas = document.createElement('canvas'); BD.canvas.className = 'island-backdrop'; BD.canvas.setAttribute('aria-hidden', 'true');
+    BD.ctx = BD.canvas.getContext('2d'); BD.light = canvas(10, 10); BD.lctx = BD.light.getContext('2d');
+    document.body.prepend(BD.canvas);
+    addEventListener('resize', bdResize);
+    BD.npcs = NPC_ADDR.map((a, i) => { const d = BUILDINGS[i % BUILDINGS.length].door; return { nick: '', x: d.x, y: d.y + 12, dir: 0, moving: false, anim: 0, look: lookOf(a), path: [], wait: Math.random() * 3 }; });
+    bdResize();
+  }
+  if (BD.focus !== focus) { BD.focus = focus; }
+  if (BD.mood !== mood) { BD.mood = mood; BD.parts = []; }
+  BD.canvas.hidden = false;
+  if (!BD.on) { BD.on = true; BD.last = 0; BD.raf = requestAnimationFrame(bdLoop); }
+}
+function backdropOff() { BD.on = false; cancelAnimationFrame(BD.raf); if (BD.canvas) BD.canvas.hidden = true; }
+
 function loop(now) {
   if (!I.mounted) return;
   const dt = Math.min(.05, (now - (I.last || now)) / 1000); I.last = now;
@@ -738,7 +838,8 @@ function applyState(list, myId) {
 }
 
 window.Island = {
-  BUILDINGS, lookOf, sheetFor,
+  BUILDINGS, lookOf, sheetFor, backdrop, backdropOff,
+  backdropState: () => ({ on: BD.on, focus: BD.focus, mood: BD.mood, scale: BD.scale }),
   mount(container, { socket, me, onEnter, onCount }) {
     I.onEnter = onEnter; I.onCount = onCount; I.socket = socket;
     if (!ground) buildStatic();
