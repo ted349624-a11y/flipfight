@@ -127,6 +127,10 @@ Her kartın bir ön ve bir arka yüzü var. Maçta kartı seçince hangi yüzün
 
 Her kart kendi geçmişini tutar: ranked maçlarda oynadığı ve kazandığı tur sayısı ve kaç sahip değiştirdiği (Market satışları). Kartın üstünde "31W/44 · 2 own" gibi görünür. 25 tur galibiyetinde kart evrimleşir (★, parlayan çerçeve), 100 galibiyette efsane görünüme geçer (★★, altın çerçeve ve parıltı). Sadece görünüm değişir, güç aynı kalır. Antrenman maçları sayılmaz.
 
+## Haftalık dünya boss'u
+
+Her sezon (hafta) iskelenin yanında denizden bir boss yükselir (Leviathan, Infernal Wyrm, Stone Colossus, Tempest Roc sırayla). Can barı tüm ada için ortaktır. Herkesin günde 3 ücretsiz dövüş hakkı var (UTC); hasar = 10 × kartlarının toplam gücü + kazanılan tur başına 2.500 + maçı kazanırsan 10.000. Boss hafta bitmeden düşerse vuran herkes 25.000 FLIP, en çok hasar veren ilk 3 ayrıca 100.000 / 50.000 / 25.000 FLIP ve kalıcı ☠ rozeti alır. Boss canı `BOSS_HP` ortam değişkeniyle ayarlanır (varsayılan 250.000). Adada iskelenin ucuna yürü ya da BOSS sekmesini aç. Test: `node scripts/boss-test.js <url> <previewKey>`.
+
 ## Kurucu (founder) hesabı
 
 Render → Environment kısmına ekle:

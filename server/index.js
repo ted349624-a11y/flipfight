@@ -11,6 +11,7 @@ const { createMatchmaker } = require('./match');
 const { createSeasons } = require('./season');
 const { createIsland } = require('./island');
 const { createClans } = require('./clans');
+const { createBoss } = require('./boss');
 const clans = createClans({ db, G });
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -150,6 +151,8 @@ async function badgesOf(ids) {
   if (!ids.length) return out;
   for (const r of await db.all('SELECT user_id, season, place FROM season_results WHERE place <= 3 AND user_id = ANY($1::int[]) ORDER BY season DESC', [ids]))
     (out[r.user_id] = out[r.user_id] || []).push({ season: r.season, place: r.place });
+  for (const r of await db.all('SELECT user_id, season, place, boss FROM boss_badges WHERE user_id = ANY($1::int[]) ORDER BY season DESC', [ids]))
+    (out[r.user_id] = out[r.user_id] || []).push({ season: r.season, bossPlace: r.place, boss: r.boss });
   return out;
 }
 const ownedCards = async userId => (await q.cardsOf(userId)).map(r => Object.assign(G.cardView(r), r.listing_id ? { listingId: r.listing_id, listPrice: r.listing_price } : {}));
@@ -161,7 +164,7 @@ async function decksOf(userId) {
 
 // Validates a deck for a room; returns { room, cards } or throws a player-facing message.
 async function validateDeck(userId, roomId, uids) {
-  const room = roomId === G.PRACTICE.id ? G.PRACTICE : G.ROOMS.find(r => r.id === roomId);
+  const room = roomId === G.PRACTICE.id ? G.PRACTICE : roomId === G.BOSS_ROOM.id ? G.BOSS_ROOM : G.ROOMS.find(r => r.id === roomId);
   if (!room) throw new Error('Unknown room.');
   if (!Array.isArray(uids) || uids.length !== G.MATCH.deckSize) throw new Error(`Pick exactly ${G.MATCH.deckSize} cards.`);
   if (new Set(uids).size !== uids.length) throw new Error('Each card can be used once per deck.');
@@ -256,7 +259,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
   res.json({ season: G.SEASON, tiers: G.TIERS, rewards: Array.from({ length: G.SEASON.paidPlaces }, (_, i) => G.seasonReward(i + 1)), market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit },
-    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM, clan: G.CLAN });
+    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM, clan: G.CLAN, bossRoom: G.BOSS_ROOM, bosses: G.BOSS.bosses.map(b => ({ id: b.id, name: b.name, el: b.el })) });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {
@@ -542,18 +545,22 @@ io.use((socket, next) => {
   }).catch(() => next(new Error('unavailable')));
 });
 
-const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf, clanOf: clans.clanOf, onWinTx: clans.onWin });
-const seasons = createSeasons({ db, G, io, onReset: clans.seasonReset, afterReset: clans.afterSeasonReset });
-const island = createIsland({ io, q, G, isFounderId: id => founderIds.has(id), clanOf: clans.clanOf, topClan: clans.topClan });
+let boss = null;
+const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf, clanOf: clans.clanOf, onWinTx: clans.onWin, getBoss: () => boss });
+const seasons = createSeasons({ db, G, io, onReset: clans.seasonReset, afterReset: () => { clans.afterSeasonReset(); if (boss) boss.load().then(boss.broadcast).catch(() => {}); } });
+boss = createBoss({ db, G, io, seasons, clanOf: clans.clanOf });
+const island = createIsland({ io, q, G, isFounderId: id => founderIds.has(id), clanOf: clans.clanOf, topClan: clans.topClan, bossState: () => boss.state() });
+boss.register(app, { auth, route });
 clans.register(app, { auth, route, fail });
 // Live feeds are only sent to players looking at the screen that shows them.
-const WATCH = { lobby: 'w:lobby', market: 'w:market' };
+const WATCH = { lobby: 'w:lobby', market: 'w:market', boss: 'w:boss' };
 io.on('connection', socket => {
   matchmaker.onConnection(socket); island.onConnection(socket);
   socket.on('watch', (what, fn) => {
     for (const r of Object.values(WATCH)) socket.leave(r);
     if (WATCH[what]) socket.join(WATCH[what]);
     if (what === 'lobby') socket.emit('lobby', matchmaker.lobbySnapshot());
+    if (what === 'boss') socket.emit('boss:update', boss.state());
     if (typeof fn === 'function') fn({ ok: true });
   });
 });
@@ -567,5 +574,6 @@ db.init()
   .then(() => clans.load())
   .then(async () => { if (FOUNDERS.size) for (const r of await db.all('SELECT id FROM users WHERE address = ANY($1::text[])', [[...FOUNDERS]])) founderIds.add(r.id); })
   .then(() => seasons.start())
+  .then(() => boss.load())
   .then(() => server.listen(PORT, () => console.log(`Flipfight running on http://localhost:${PORT}`)))
   .catch(err => { console.error('Could not connect to the database:', err.message); process.exit(1); });

@@ -51,6 +51,7 @@ const PLAZA_C = { x: 26, y: 18 };
 const SPAWN = { x: PLAZA_C.x * T + 8, y: (PLAZA_C.y + 3) * T + 4 };
 
 const map = [], solid = [], props = [], lights = [];
+const BOSS_SPOT = { id: 'boss', label: 'WORLD BOSS', sign: '#ff5d6c', door: null, exit: null, x: 0, y: 0, w: 112, h: 104 };
 (function buildMap() {
   const cx = MW / 2, cy = MH / 2 + .5;
   for (let y = 0; y < MH; y++) {
@@ -71,6 +72,9 @@ const map = [], solid = [], props = [], lights = [];
   // path to the pier at the south shore
   let py = PLAZA_C.y; while (py < MH - 1 && map[py + 1][PLAZA_C.x] !== SHALLOW && map[py + 1][PLAZA_C.x] !== DEEP) { py++; setPath(PLAZA_C.x, py); }
   props.push({ k: 'pier', x: PLAZA_C.x, y: py + 1 });
+  // the world boss rises from the sea next to the end of the pier; walking to the pier's end opens the boss screen
+  BOSS_SPOT.door = { x: PLAZA_C.x * T + 8, y: (py + 3) * T + 6 }; BOSS_SPOT.exit = { x: PLAZA_C.x * T + 8, y: (py + 1) * T + 2 };
+  BOSS_SPOT.x = (PLAZA_C.x + 1) * T + 18; BOSS_SPOT.y = (py + 1) * T - 40; // drawn at 2x: 112 x 104
   for (let y = py + 1; y < Math.min(MH, py + 4); y++) solid[y][PLAZA_C.x] = false;
   BUILDINGS.forEach(b => { for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) solid[y][x] = true; });
   for (let y = PLAZA_C.y - 1; y <= PLAZA_C.y; y++) for (let x = PLAZA_C.x - 1; x <= PLAZA_C.x; x++) solid[y][x] = true; // fountain
@@ -569,6 +573,46 @@ function drawChar(c, p) {
   c.drawImage(sh, frame * 16, p.dir * 22, 16, 22, Math.round(p.x) - 8, Math.round(p.y) - 21, 16, 22);
 }
 
+// ---------- world boss ----------
+const BOSS_PAL = {
+  water: { body: '#2f6ab0', shade: '#1d4680', belly: '#8fd0ff', spike: '#4fd3d3', eye: '#ffcc33' },
+  fire: { body: '#c4401a', shade: '#7a2410', belly: '#ffb347', spike: '#ffcc33', eye: '#fff3c4' },
+  earth: { body: '#8a6a3c', shade: '#5b4426', belly: '#c9a466', spike: '#5fd38d', eye: '#ff6b35' },
+  wind: { body: '#7fb8d8', shade: '#4f86a8', belly: '#f3ecd6', spike: '#c79bff', eye: '#ff5d6c' },
+};
+const bossSprites = new Map();
+// A sea serpent rising from the water, coloured by the boss's element. 54x50 plus outline.
+function bossSprite(el) {
+  if (bossSprites.has(el)) return bossSprites.get(el);
+  const P = BOSS_PAL[el] || BOSS_PAL.water;
+  const img = sprite(54, 50, c => {
+    const neck = y => { const t = (y - 20) / 30; return { cx: 18 + Math.sin(t * 2.4) * 7, w: 9 + t * 8 }; };
+    for (let y = 20; y < 50; y++) { const { cx, w } = neck(y); px(c, P.body, cx - w / 2, y, w, 1); px(c, P.belly, cx + w * .12, y, w * .32, 1); if (y % 4 === 0) px(c, P.shade, cx - w / 2, y, w * .4, 1); }
+    for (let k = 0; k < 6; k++) { const y = 22 + k * 5, { cx, w } = neck(y), x = cx - w / 2; px(c, P.spike, x - 3, y, 4, 2); px(c, P.spike, x - 2, y - 2, 2, 2); }
+    // head
+    px(c, P.body, 12, 8, 26, 13); px(c, P.body, 16, 5, 18, 4); px(c, P.shade, 12, 18, 26, 3);
+    px(c, P.body, 36, 11, 16, 8); px(c, P.shade, 36, 17, 16, 2);                   // snout
+    px(c, P.shade, 30, 21, 20, 4); px(c, P.body, 30, 24, 18, 2);                    // open jaw
+    for (let x = 31; x < 49; x += 3) { px(c, '#f3ecd6', x, 19, 1, 2); px(c, '#f3ecd6', x + 1, 23, 1, 2); } // teeth
+    px(c, '#3a0a14', 31, 21, 18, 2);                                                 // mouth
+    px(c, P.spike, 16, 0, 3, 6); px(c, P.spike, 24, 1, 3, 5); px(c, P.spike, 12, 4, 3, 4); // horns and crest
+    px(c, P.eye, 28, 10, 4, 3); px(c, '#ffffff', 28, 10, 1, 1); px(c, '#3a0a14', 31, 11, 1, 2); // eye
+    px(c, P.shade, 47, 12, 2, 1);                                                    // nostril
+    px(c, P.belly, 14, 9, 10, 1);                                                    // highlight
+  });
+  bossSprites.set(el, img);
+  return img;
+}
+function drawBoss(c, t, st) {
+  if (!st || st.killedAt) return;
+  const bob = reduced ? 0 : Math.round(Math.sin(t * 1.4) * 2) * 2, x = BOSS_SPOT.x, y = BOSS_SPOT.y + bob;
+  const img = bossSprite(st.el);
+  c.drawImage(img, x, y, img.width * 2, img.height * 2);
+  // water churning around the neck
+  const wy = BOSS_SPOT.y + 96;
+  for (let i = 0; i < 14; i++) { const ph = t * 3 + i; px(c, i % 2 ? '#cfe6ff' : '#9cc3f0', x + 8 + i * 5 + Math.round(Math.sin(ph) * 2), wy + (i % 3) * 2, 4, 1); }
+}
+
 // ---------- clan banners ----------
 // Palette and symbols must match CLAN in shared/game.js (the app passes the palette in with setClanColors).
 let CLAN_COLORS = ['#e0484e', '#ff8a3a', '#ffcc33', '#5fd38d', '#4fd3d3', '#4f8dff', '#8a5cf6', '#ff6bd6', '#f3ecd6', '#2a2238'];
@@ -668,13 +712,14 @@ function moveMe(dt) {
     me.dir = Math.abs(vx) > Math.abs(vy) ? (vx < 0 ? 1 : 2) : (vy < 0 ? 3 : 0);
     me.anim += dt * 7;
   } else me.anim = 0;
-  const at = BUILDINGS.find(b => Math.abs(me.x - b.door.x) < 10 && Math.abs(me.y - b.door.y) < 9);
+  const at = [...BUILDINGS, BOSS_SPOT].find(b => b.door && Math.abs(me.x - b.door.x) < 10 && Math.abs(me.y - b.door.y) < 9);
   if (!at) I.cooldownDoor = null;
   else if (at.id !== I.cooldownDoor && (me.moving || I.pending === at.id)) { I.cooldownDoor = at.id; I.pending = null; I.path = []; enter(at); }
 }
 function enter(b) {
   I.inside = b.id;
-  try { localStorage.setItem('ff-island-pos', JSON.stringify({ x: b.door.x, y: b.door.y + 18 })); } catch (e) {}
+  const out = b.exit || { x: b.door.x, y: b.door.y + 18 };
+  try { localStorage.setItem('ff-island-pos', JSON.stringify(out)); } catch (e) {}
   if (I.onEnter) I.onEnter(b.id);
 }
 function sendPosition(now) {
@@ -721,8 +766,9 @@ function renderWorld(now, V) {
   const items = sortables.filter(s => s.x < cx + vw + 40 && s.x + s.img.width > cx - 40 && s.y < cy + vh + 40 && s.y + s.img.height > cy - 60);
   chars.forEach(p => items.push({ char: p, base: p.y }));
   items.push({ flag: true, base: FLAGPOLE.y });
+  if (BOSS_SPOT.door) items.push({ boss: true, base: BOSS_SPOT.y + 98 });
   items.sort((a, b) => a.base - b.base);
-  for (const it of items) { if (it.char) drawChar(c, it.char); else if (it.flag) drawFlagpole(c, t, V.topClan); else c.drawImage(it.img, it.x, it.y); }
+  for (const it of items) { if (it.char) drawChar(c, it.char); else if (it.flag) drawFlagpole(c, t, V.topClan); else if (it.boss) drawBoss(c, t, I.boss); else c.drawImage(it.img, it.x, it.y); }
   // fountain water spray and forge smoke
   if (!reduced) {
     const fx = PLAZA_C.x * T - 1, fy = (PLAZA_C.y - 1) * T + 3;
@@ -748,6 +794,7 @@ function renderWorld(now, V) {
     glow(x, y, l.r * fl, l.c, .75);
   }
   if (V.glowAt) glow(V.glowAt.x - cx, V.glowAt.y - cy - 8, 40, [180, 170, 220], .35); // a little light around you
+  if (I.boss && !I.boss.killedAt && BOSS_SPOT.door) glow(BOSS_SPOT.x + 60 - cx, BOSS_SPOT.y + 24 - cy, 70 + Math.sin(t * 2) * 8, [255, 90, 90], .5); // the boss's glare
   for (const p of chars) if (p.founder) glow(p.x - cx, p.y - cy - 10, 34 + Math.sin(t * 2.4) * 4, [255, 200, 90], .55); // royal aura
   if (!reduced) flies.forEach(f => { const x = f.x - cx, y = f.y - cy; if (Math.sin(f.ph * 2) > 0) glow(x, y, 7, [200, 255, 120], .5); });
   c.globalCompositeOperation = 'multiply'; c.drawImage(V.light, 0, 0);
@@ -762,6 +809,14 @@ function renderWorld(now, V) {
     }
   }
   c.restore();
+}
+function drawBossSign(c, st) {
+  const sx = BOSS_SPOT.x + 60, sy = BOSS_SPOT.y - 10;
+  const label = st.killedAt ? 'DEFEATED' : st.name.toUpperCase(), w = Math.max(64, Math.round(c.measureText(label).width + 12));
+  px(c, OUT, sx - w / 2 - 1, sy - 12, w + 2, 24); px(c, '#2a1020', sx - w / 2, sy - 11, w, 22);
+  c.fillStyle = st.killedAt ? '#9d96c6' : '#ff5d6c'; c.fillText(label, sx, sy);
+  const f = st.maxHp ? st.hp / st.maxHp : 0, bw = w - 8;
+  px(c, '#0b0916', sx - bw / 2, sy + 3, bw, 5); px(c, f > .5 ? '#5fd38d' : f > .2 ? '#ffcc33' : '#ff5d6c', sx - bw / 2, sy + 3, Math.round(bw * f), 5);
 }
 function drawSign(c, b) {
   const sx = b.door.x, sy = b.y * T - b.up + (b.board ? 14 : 6);
@@ -795,6 +850,7 @@ function render(now) {
       px(c, b.sign, b.door.x - 3, b.door.y - 10, 7, 1); px(c, b.sign, b.door.x - 2, b.door.y - 9, 5, 1); px(c, b.sign, b.door.x - 1, b.door.y - 8, 3, 1); px(c, b.sign, b.door.x, b.door.y - 7, 1, 1);
     }
   });
+  if (I.boss && BOSS_SPOT.door) drawBossSign(c, I.boss);
   for (const p of chars) {
     const name = p.nick, nw = Math.round(c.measureText(name).width);
     const nx = Math.round(p.x), ny = Math.round(p.y) - 26;
@@ -829,6 +885,7 @@ const MOODS = {
 };
 const BD = { canvas: null, ctx: null, light: null, lctx: null, focus: 'plaza', mood: 'calm', vw: 0, vh: 0, scale: 3, cam: null, flies: [], parts: [], npcs: [], raf: 0, last: 0, on: false };
 function focusPoint(id) {
+  if (id === 'boss' && BOSS_SPOT.door) return { x: BOSS_SPOT.x + 30, y: BOSS_SPOT.y + 40 };
   const b = BUILDINGS.find(x => x.id === id);
   return b ? { x: b.door.x, y: b.door.y - b.h * T * .45 } : { x: PLAZA_C.x * T, y: PLAZA_C.y * T + 8 };
 }
@@ -917,7 +974,8 @@ function loop(now) {
 function onPointer(e) {
   const r = I.canvas.getBoundingClientRect();
   const wx = I.cam.x + (e.clientX - r.left) / r.width * I.vw, wy = I.cam.y + (e.clientY - r.top) / r.height * I.vh;
-  const b = BUILDINGS.find(b => wx >= b.x * T && wx < (b.x + b.w) * T && wy >= b.y * T - b.up && wy < (b.y + b.h) * T + 4);
+  let b = BUILDINGS.find(b => wx >= b.x * T && wx < (b.x + b.w) * T && wy >= b.y * T - b.up && wy < (b.y + b.h) * T + 4);
+  if (!b && BOSS_SPOT.door && wx >= BOSS_SPOT.x && wx < BOSS_SPOT.x + BOSS_SPOT.w && wy >= BOSS_SPOT.y - 24 && wy < BOSS_SPOT.y + BOSS_SPOT.h) b = BOSS_SPOT;
   if (b) { I.pending = b.id; I.cooldownDoor = null; I.path = findPath(I.me.x, I.me.y, b.door.x, b.door.y + 2); }
   else { I.pending = null; I.path = findPath(I.me.x, I.me.y, wx, wy); }
 }
@@ -948,7 +1006,7 @@ function enterChannel(ch) {
   if (!I.socket || !I.me) return;
   I.socket.emit('island:enter', { x: Math.round(I.me.x), y: Math.round(I.me.y), channel: ch || undefined }, r => {
     if (!r || !r.ok || !I.mounted) return;
-    I.channel = r.channel; I.cap = r.cap; I.topClan = r.topClan || null;
+    I.channel = r.channel; I.cap = r.cap; I.topClan = r.topClan || null; if (r.boss) I.boss = r.boss;
     applyFull(r.players, I.me.id);
   });
 }
@@ -1015,11 +1073,13 @@ window.Island = {
     I.others.clear();
   },
   emote(e) { if (!I.mounted) return; I.myEmote = e; I.myEmoteAt = performance.now(); if (I.socket) I.socket.emit('island:emote', e); },
-  goTo(id) { const b = BUILDINGS.find(x => x.id === id); if (b && I.mounted) { I.pending = b.id; I.cooldownDoor = null; I.path = findPath(I.me.x, I.me.y, b.door.x, b.door.y + 2); } },
+  goTo(id) { const b = id === 'boss' ? BOSS_SPOT : BUILDINGS.find(x => x.id === id); if (b && I.mounted) { I.pending = b.id; I.cooldownDoor = null; I.path = findPath(I.me.x, I.me.y, b.door.x, b.door.y + 2); } },
   resize,
   zoom(n) { I.zoom = n || 0; resize(); },
   setClanColors(cols) { if (Array.isArray(cols) && cols.length) { CLAN_COLORS = cols; bannerCache.clear(); } },
   setTopClan(cl) { I.topClan = cl || null; },
+  setBoss(st) { I.boss = st || null; },
+  bossSprite,
   bannerSprite, symbols: SYMBOL_IDS,
   channels(cb) { if (I.socket) I.socket.emit('island:channels', r => cb(r && r.ok ? r : null)); else cb(null); },
   switchChannel(n) { if (I.mounted && n !== I.channel) { I.others.clear(); enterChannel(n); } },

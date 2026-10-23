@@ -15,7 +15,7 @@ const EMOTES = ['hi', 'gg', 'wow', 'lol', 'fire', 'heart'];
 const TICK_MS = 200;
 const CHANNEL_CAP = Number(process.env.ISLAND_CHANNEL_CAP) || 50;
 
-function createIsland({ io, q, isFounderId = () => false, clanOf = () => null, topClan = () => null }) {
+function createIsland({ io, q, isFounderId = () => false, clanOf = () => null, topClan = () => null, bossState = () => null }) {
   const players = new Map();  // userId -> { id, nick, addr, elo, x, y, dir, moving, emote, emoteAt, lastMove, socketId, dirty, ch }
   const channels = new Map(); // channel number -> Set of userIds
 
@@ -57,6 +57,7 @@ function createIsland({ io, q, isFounderId = () => false, clanOf = () => null, t
   }
   function leave(socket) {
     const p = players.get(socket.data.userId);
+    socket.leave('island'); // global island feed (world boss)
     if (p && p.socketId === socket.id) { socket.leave(room(p.ch)); removePlayer(p); }
   }
 
@@ -77,9 +78,9 @@ function createIsland({ io, q, isFounderId = () => false, clanOf = () => null, t
         if (!channels.has(ch)) channels.set(ch, new Set());
         channels.get(ch).add(u.id);
         socket.to(room(ch)).emit('island:join', full(p));
-        socket.join(room(ch));
+        socket.join(room(ch)); socket.join('island');
         const here = [...channels.get(ch)].map(id => full(players.get(id)));
-        if (typeof fn === 'function') fn({ ok: true, channel: ch, cap: CHANNEL_CAP, players: here, topClan: topClan() });
+        if (typeof fn === 'function') fn({ ok: true, channel: ch, cap: CHANNEL_CAP, players: here, topClan: topClan(), boss: bossState() });
       } catch (e) { if (typeof fn === 'function') fn({ ok: false, error: 'Could not join the island.' }); }
     });
     socket.on('island:channels', fn => { if (typeof fn === 'function') fn({ ok: true, channels: list(), cap: CHANNEL_CAP }); });

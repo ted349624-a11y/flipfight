@@ -3,7 +3,7 @@ const { createBot } = require('./bot');
 
 // Matchmaking queues and the server-authoritative match engine.
 // Live match state is kept in memory; balances, ELO and results are written to the database.
-function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf, clanOf = () => null, onWinTx }) {
+function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf, clanOf = () => null, onWinTx, getBoss = () => null }) {
   const sockets = new Map();   // userId -> socket
   const queues = new Map(G.ROOMS.map(r => [r.id, []])); // roomId -> [{userId, cards, at}]
   const userQueue = new Map(); // userId -> roomId
@@ -90,6 +90,44 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
     } finally { busy.delete(userId); }
   }
 
+  // ---------- world boss fight (a practice-style match against the boss deck) ----------
+  async function startBoss(userId) {
+    if (busy.has(userId)) throw new Error('Please wait a moment.');
+    if (userMatch.has(userId)) throw new Error('You are already in a match.');
+    if (userQueue.has(userId)) throw new Error('Cancel your search before fighting the boss.');
+    const bossMod = getBoss(); if (!bossMod) throw new Error('The boss is not here yet.');
+    busy.add(userId);
+    try {
+      const deckRow = await q.deckOf(userId, G.BOSS_ROOM.id);
+      if (!deckRow) throw new Error('Pick your 5 cards first.');
+      const { cards } = await validateDeck(userId, G.BOSS_ROOM.id, JSON.parse(deckRow.card_uids));
+      const cur = await bossMod.useAttempt(userId); // throws when no fights are left today
+      const u = await q.userById(userId);
+      const human = { userId: u.id, nickname: u.nickname, clan: clanOf(u.clan_id), elo: u.elo, hand: cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
+      const b = { userId: BOT_ID, isBot: true, nickname: cur.boss.name, elo: 2000, hand: G.bossDeck(cur.boss), used: [], energy: G.BOSS.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
+      const m = { id: crypto.randomUUID(), room: G.BOSS_ROOM, practice: true, boss: { id: cur.boss.id, name: cur.boss.name, el: cur.boss.el }, level: 'hard',
+        players: [human, b], round: 1, phase: 'pick', deadline: 0, timer: null, botTimer: null, log: [], mult: 1, flip: null };
+      matches.set(m.id, m); userMatch.set(userId, m.id);
+      broadcastLobby(); startRound(m);
+      return m.id;
+    } finally { busy.delete(userId); }
+  }
+  async function finishBoss(m) {
+    m.phase = 'done';
+    const [p, b] = m.players;
+    const out = p.wins > b.wins ? 'win' : p.wins < b.wins ? 'loss' : 'draw';
+    const damage = G.bossDamage(m.log.map(r => r.powers[0]), m.log.filter(r => r.winner === 0).length, out === 'win');
+    userMatch.delete(p.userId); matches.delete(m.id);
+    let hit = null;
+    try { hit = await getBoss().recordFight(p.userId, damage); } catch (e) { log(e); }
+    emitTo(p.userId, 'match:end', {
+      matchId: m.id, practice: true, boss: { ...m.boss, damage, dealt: hit ? hit.dealt : 0, hp: hit ? hit.hp : null, maxHp: hit ? hit.maxHp : null, killed: !!(hit && hit.killed) },
+      out, myWins: p.wins, oppWins: b.wins, opponent: b.nickname, room: m.room.name, mult: 1, folded: null,
+      stake: 0, pot: 0, rake: 0, net: 0, split: { burn: 0, treasury: 0, season: 0 }, eloDelta: 0, profile: publicProfile(await q.userById(p.userId)),
+    });
+    broadcastLobby();
+  }
+
   function botPick(m) {
     const b = m.players.find(p => p.isBot);
     if (!b || m.phase !== 'pick' || b.pick !== null) return;
@@ -160,7 +198,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
   const entryOf = m => m.room.stake * m.mult; // what each player has in the pot right now
   function canCall(m, idx) {
     const p = m.players[idx];
-    return m.phase === 'pick' && !m.flip && m.calling === undefined && m.round >= G.FLIP_CALL.fromRound && !p.calledFlip && p.pick === null && m.mult * 2 <= G.FLIP_CALL.maxMult;
+    return !m.boss && m.phase === 'pick' && !m.flip && m.calling === undefined && m.round >= G.FLIP_CALL.fromRound && !p.calledFlip && p.pick === null && m.mult * 2 <= G.FLIP_CALL.maxMult;
   }
   async function callFlip(userId, matchId) {
     const m = matches.get(matchId || userMatch.get(userId));
@@ -211,7 +249,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
     const me = m.players[idx], op = m.players[1 - idx];
     return {
       matchId: m.id,
-      room: { id: m.room.id, name: m.room.name, stake: m.room.stake, practice: !!m.practice, level: m.level || null },
+      room: { id: m.room.id, name: m.room.name, stake: m.room.stake, practice: !!m.practice, level: m.level || null, boss: m.boss || null },
       round: m.round, phase: m.phase, deadline: m.deadline, serverNow: Date.now(),
       mult: m.mult, entry: entryOf(m), canCall: canCall(m, idx), lastFlip: m.lastFlip ? { mine: m.lastFlip.by === idx, mult: m.lastFlip.mult, at: m.lastFlip.at } : null,
       flipCall: m.flip ? { mine: m.flip.by === idx, extra: m.flip.extra, deadline: m.flip.deadline } : null,
@@ -291,6 +329,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
   }
 
   async function finishPractice(m, forced) {
+    if (m.boss) return finishBoss(m);
     m.phase = 'done';
     const [p, b] = m.players;
     const out = forced !== undefined ? (forced === 0 ? 'win' : 'loss') : p.wins > b.wins ? 'win' : p.wins < b.wins ? 'loss' : 'draw';
@@ -375,6 +414,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
       await leaveQueue(userId);
       return { profile: publicProfile(await q.userById(userId)) };
     }));
+    socket.on('boss:start', (data, fn) => handle(fn, async () => ({ matchId: await startBoss(userId) })));
     socket.on('practice:start', (data, fn) => handle(fn, async () => ({ matchId: await startPractice(userId, String(data && data.level)) })));
     socket.on('match:quit', (data, fn) => handle(fn, () => { quitPractice(userId); return {}; }));
     socket.on('match:flip', (data, fn) => handle(fn, async () => { await callFlip(userId, String(data && data.matchId)); return {}; }));

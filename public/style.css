@@ -650,3 +650,26 @@ body:not(.on-island) .wrap::before{content:"";position:fixed;top:0;bottom:0;left
 .card.st3 .cname{color:var(--gold)}
 @keyframes evolved{50%{box-shadow:-4px 0 0 0 #fff3c4,4px 0 0 0 #fff3c4,0 -4px 0 0 #fff3c4,0 4px 0 0 #fff3c4,0 8px 0 0 rgba(0,0,0,.4),0 0 26px 6px rgba(255,204,51,.6)}}
 @media (prefers-reduced-motion:reduce){.card.st3{animation:none}}
+
+/* world boss */
+nav.tabs button.tab-boss{color:#ff5d6c}
+.boss-hero{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center;padding:20px;--b:#ff5d6c;background:linear-gradient(180deg,#2a1020,#1c1930)}
+#bossArt{width:224px;height:208px;image-rendering:pixelated}
+.boss-info{display:flex;flex-direction:column;gap:10px}
+.boss-info h2{font-size:22px;color:#ff5d6c;margin:0}
+.hpbar{position:relative;height:26px;background:#0b0916;box-shadow:0 0 0 3px #0b0916,inset 0 0 0 2px #3d3668}
+.hpbar i{position:absolute;left:2px;top:2px;bottom:2px;background:#5fd38d;transition:width .6s steps(12)}
+.hpbar i.mid{background:var(--gold)} .hpbar i.low{background:var(--bad)}
+.hpbar span{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--font-px);font-size:10px;color:#fff;text-shadow:1px 1px 0 #0b0916}
+.boss-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.boss-board,.boss-rules{padding:16px 18px}
+.boss-board h3,.boss-rules h3{font-size:10px;color:var(--muted);margin:0 0 10px}
+.boss-board ol{margin:0;padding-left:28px;font-size:19px;display:flex;flex-direction:column;gap:4px}
+.boss-board li b{font-weight:400;color:var(--gold);float:right}
+.boss-rules ul{margin:0;padding-left:20px;font-size:18px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+.boss-rules b{color:var(--fg);font-weight:400}
+.boss-deck-title{font-size:11px;color:var(--muted)}
+.boss-deck-title small{font-family:var(--font-body);font-size:16px}
+.boss-hit{font-family:var(--font-px);font-size:18px;color:#ff5d6c;text-shadow:3px 3px 0 #0b0916}
+.trophy.boss-badge{color:#ff5d6c}
+@media (max-width:700px){.boss-hero{grid-template-columns:1fr;justify-items:center;text-align:center}.boss-info{width:100%}#bossArt{width:168px;height:156px}.boss-cols{grid-template-columns:1fr}}

@@ -56,6 +56,37 @@ const ROOMS = [
   { id: 3, name: 'ROOM 3 · LEGEND', stake: 500000, limit: null, rake: 0.04 }, // null = no cap
 ];
 
+// World boss: one boss per weekly season, shared HP for the whole island. Everyone gets 3 free fights a day
+// (UTC). A fight is a match against the boss's own deck; your damage =
+//   10 x (total final power of your cards over the match) + 2,500 per round won + 10,000 for winning the match.
+// If the boss falls before the week ends, everyone who hit it gets 25,000 FLIP and the top 3 damage dealers get
+// 100,000 / 50,000 / 25,000 more and a permanent boss badge. Bosses rotate every week.
+const BOSS_ROOM = { id: 9, name: 'WORLD BOSS', stake: 0, limit: null, rake: 0 };
+const BOSS = {
+  hp: 250000, fightsPerDay: 3, energy: 20,
+  damage: { perPower: 10, perRound: 2500, win: 10000 },
+  rewards: { all: 25000, top: [100000, 50000, 25000] },
+  bosses: [
+    { id: 'leviathan', name: 'The Leviathan', el: 'water', cards: ['Tidal Maw', 'Abyssal Coil', 'Brine Fang', 'Deep Gaze', 'Foam Lash'] },
+    { id: 'wyrm', name: 'Infernal Wyrm', el: 'fire', cards: ['Molten Jaw', 'Cinder Wing', 'Ash Breath', 'Ember Eye', 'Slag Tail'] },
+    { id: 'colossus', name: 'Stone Colossus', el: 'earth', cards: ['Granite Fist', 'Quake Stomp', 'Moss Shoulder', 'Boulder Heart', 'Pebble Swarm'] },
+    { id: 'roc', name: 'Tempest Roc', el: 'wind', cards: ['Storm Talon', 'Gale Wing', 'Thunder Cry', 'Sky Dive', 'Feather Storm'] },
+  ],
+};
+const bossOf = seasonNumber => BOSS.bosses[(Math.max(1, seasonNumber) - 1) % BOSS.bosses.length];
+// The boss's five cards: its element on the front, the other elements (with abilities) on the back.
+function bossDeck(boss) {
+  const order = ['fire', 'wind', 'earth', 'water'], i = order.indexOf(boss.el);
+  const backs = [order[(i + 1) % 4], order[(i + 2) % 4], order[(i + 3) % 4], order[(i + 1) % 4], order[(i + 3) % 4]];
+  const rar = ['legendary', 'epic', 'epic', 'rare', 'rare'], pow = [88, 72, 70, 54, 52], ab = ['trap', 'shield', 'drain', 'echo', 'rally'];
+  return boss.cards.map((name, j) => ({ uid: 2e9 + j, tpl: 100 + j * 7 + i, name, el: boss.el, rar: rar[j], pow: pow[j], tid: 'BOSS',
+    back: { name: name + ' II', el: backs[j], pow: Math.round(pow[j] * 0.94), ab: ab[j] } }));
+}
+function bossDamage(myPowers, roundsWon, wonMatch) {
+  const d = BOSS.damage;
+  return myPowers.reduce((a, p) => a + p, 0) * d.perPower + roundsWon * d.perRound + (wonMatch ? d.win : 0);
+}
+
 // Practice room: free games against a bot. No stake, no deck cap, no ELO, no history.
 const PRACTICE = { id: 0, name: 'PRACTICE · VS BOT', stake: 0, limit: null, rake: 0 };
 const BOT_LEVELS = {
@@ -231,4 +262,4 @@ function clash(a, b) {
   };
 }
 
-module.exports = { EVOLVE, stageOf, CLAN, clanBannerOk, FLIP_CALL, BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { BOSS_ROOM, BOSS, bossOf, bossDeck, bossDamage, EVOLVE, stageOf, CLAN, clanBannerOk, FLIP_CALL, BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

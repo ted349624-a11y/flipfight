@@ -61,6 +61,7 @@
     <button role="tab" data-tab="shop" aria-selected="false">SHOP</button>
     <button role="tab" data-tab="ranks" aria-selected="false">RANKS</button>
     <button role="tab" data-tab="clans" aria-selected="false">CLANS</button>
+    <button role="tab" data-tab="boss" aria-selected="false" class="tab-boss">BOSS</button>
     <button role="tab" data-tab="history" aria-selected="false">HISTORY</button>
   </nav>
 
@@ -288,6 +289,26 @@
     <div id="clanView"></div>
     <div class="clan-search"><label class="note" for="clanSearch">Find a clan</label><input id="clanSearch" autocomplete="off" spellcheck="false" placeholder="Name or tag"></div>
     <div id="clanList" class="clan-list"></div>
+  </section>
+
+  <!-- WORLD BOSS -->
+  <section id="boss" hidden>
+    <div class="frame boss-hero">
+      <canvas id="bossArt" width="56" height="52" aria-hidden="true"></canvas>
+      <div class="boss-info">
+        <span class="tier" id="bossTag">WORLD BOSS</span>
+        <h2 id="bossName">…</h2>
+        <div class="hpbar" role="meter" aria-label="Boss health" id="bossMeter"><i id="bossHp"></i><span id="bossHpTxt" class="num"></span></div>
+        <p class="note" id="bossNote"></p>
+        <div class="row"><button class="btn" type="button" id="bossFight">Fight the boss</button><span class="note" id="bossLeft"></span></div>
+      </div>
+    </div>
+    <div class="boss-cols">
+      <div class="frame boss-board"><h3>TOP DAMAGE THIS WEEK</h3><ol id="bossTop"></ol><p class="note" id="bossMine"></p></div>
+      <div class="frame boss-rules"><h3>HOW IT WORKS</h3><ul id="bossRules"></ul></div>
+    </div>
+    <h3 class="boss-deck-title">THE BOSS'S CARDS <small>(tap ↻ to see their backs)</small></h3>
+    <div class="cards" id="bossDeck"></div>
   </section>
 
   <!-- HISTORY -->

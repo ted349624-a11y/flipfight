@@ -158,7 +158,9 @@ function tierBadge(elo, compact) {
 const PLACE_COL = ['#ffcc33', '#d6dde8', '#d38a52'];
 function trophies(badges) {
   const list = badges || [], founder = list.some(b => b.founder);
-  return (founder ? '<span class="founder-tag" title="Flipfight founder">★ FOUNDER</span>' : '') + list.filter(b => b.place).slice(0, 3).map(b => `<span class="trophy" style="color:${PLACE_COL[b.place - 1]}" title="#${b.place} in Season ${b.season}">${TROPHY}<em>S${b.season}</em></span>`).join('');
+  const bossName = id => ((S.cfg.bosses || []).find(x => x.id === id) || { name: 'the boss' }).name;
+  return (founder ? '<span class="founder-tag" title="Flipfight founder">★ FOUNDER</span>' : '') + list.filter(b => b.place).slice(0, 3).map(b => `<span class="trophy" style="color:${PLACE_COL[b.place - 1]}" title="#${b.place} in Season ${b.season}">${TROPHY}<em>S${b.season}</em></span>`).join('')
+    + list.filter(b => b.bossPlace).slice(0, 2).map(b => `<span class="trophy boss-badge" title="#${b.bossPlace} damage dealer against ${esc(bossName(b.boss))} (week ${b.season})">☠<em>W${b.season}</em></span>`).join('');
 }
 
 // clan banner next to a nickname
@@ -173,7 +175,7 @@ function backEl() { const d = document.createElement('div'); d.className = 'back
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
 // ---------- screens ----------
-const SCREENS = ['login', 'nickname', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'clans', 'history'];
+const SCREENS = ['login', 'nickname', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'clans', 'boss', 'history'];
 let current = null;
 function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
@@ -188,7 +190,7 @@ function show(id) {
 }
 // Ask the server only for the live feed this screen shows (room counts or market changes).
 function watchFeed() {
-  const want = ['arena', 'deck', 'queue'].includes(current) ? 'lobby' : current === 'market' ? 'market' : '';
+  const want = ['arena', 'deck', 'queue'].includes(current) ? 'lobby' : current === 'market' ? 'market' : current === 'boss' ? 'boss' : '';
   if (S.socket && S.socket.connected && S.watching !== want) { S.watching = want; S.socket.emit('watch', want); }
 }
 // World scene, music and ambience for each screen
@@ -199,7 +201,8 @@ function atmosphere(id) {
   else if (id !== 'result') FX.scene('night');
   if (id !== 'match') FX.music('lobby');
   // the island itself is the backdrop of every screen: the camera rests on the building you are in
-  const focus = { arena: 'arena', deck: 'arena', queue: 'arena', match: 'arena', result: 'arena', collection: 'collection', forge: 'forge', market: 'market', shop: 'shop', ranks: 'ranks', clans: 'clans', history: 'history' }[id] || 'plaza';
+  const bossFight = roomId === 9 && ['deck', 'match', 'result'].includes(id);
+  const focus = bossFight ? 'boss' : { arena: 'arena', deck: 'arena', queue: 'arena', match: 'arena', result: 'arena', collection: 'collection', forge: 'forge', market: 'market', shop: 'shop', ranks: 'ranks', clans: 'clans', boss: 'boss', history: 'history' }[id] || 'plaza';
   const mood = ['deck', 'queue', 'match', 'result'].includes(id) && roomId != null ? ({ 2: 'volcano', 3: 'temple' }[roomId] || 'calm') : 'calm';
   if (id === 'island') Island.backdropOff(); else Island.backdrop(focus, mood);
   FX.ambient(id === 'forge' ? 'forge' : id === 'market' ? 'market' : null);
@@ -219,7 +222,7 @@ function setTab(tab) {
   if (S.match) return;
   S.tab = tab;
   [...$('tabs').children].forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ({ island: renderIsland, arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, clans: renderClans, history: renderHistory })[tab]();
+  ({ island: renderIsland, arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, clans: renderClans, boss: renderBoss, history: renderHistory })[tab]();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { SFX.click(); setTab(b.dataset.tab); } };
 function lockTabs(on) { [...$('tabs').children].forEach(b => { b.disabled = on; b.style.opacity = on ? .45 : 1; }); }
@@ -444,6 +447,7 @@ function connectSocket() {
   s.on('match:state', onMatchState);
   s.on('match:end', onMatchEnd);
   s.on('market:update', onMarketUpdate);
+  s.on('boss:update', st => { Island.setBoss(st); if (BS.data) { BS.data.boss = st; if (current === 'boss') drawBossHero(); } });
   s.on('season:ended', d => { toast(`Season ${d.season} is over. Season ${d.next} has started!`); refreshMe().then(() => { if (current === 'ranks') renderRanks(); }).catch(() => {}); });
   s.on('market:sold', d => {
     S.me = d.profile; updateTop(); SFX.coin();
@@ -464,7 +468,7 @@ function emit(ev, data) {
 }
 
 // ---------- island (home) ----------
-const BUILDING_TAB = { arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', clans: 'clans', history: 'history' };
+const BUILDING_TAB = { arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', clans: 'clans', boss: 'boss', history: 'history' };
 let hintTimer = 0;
 function renderIsland() {
   show('island');
@@ -473,7 +477,7 @@ function renderIsland() {
     onEnter: id => { SFX.found(); setTab(BUILDING_TAB[id]); },
     onCount: (n, ch, cap) => { $('islandOnline').textContent = `● ISLAND #${ch || 1} · ${n}${cap ? '/' + cap : ''}`; },
   });
-  $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" data-b="${b.id}">${b.label}</button>`).join('') +
+  $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" data-b="${b.id}">${b.label}</button>`).join('') + '<button type="button" data-b="boss">WORLD BOSS</button>' +
     '<hr><button type="button" data-act="sfx"></button><button type="button" class="muted" data-act="out">SIGN OUT</button>';
   closeIslandMenu(); updateTop();
   $('islandHint').classList.remove('gone'); clearTimeout(hintTimer); hintTimer = setTimeout(() => $('islandHint').classList.add('gone'), 6000);
@@ -515,7 +519,7 @@ $('islandView').addEventListener('pointerdown', closeIslandMenu);
 $('emotes').onclick = e => { const b = e.target.closest('[data-e]'); if (b) { Island.emote(b.dataset.e); SFX.click(); } };
 
 // ---------- arena ----------
-const roomById = id => (id === 0 ? S.cfg.practice : S.cfg.rooms.find(x => x.id === id));
+const roomById = id => (id === 0 ? S.cfg.practice : id === 9 ? S.cfg.bossRoom : S.cfg.rooms.find(x => x.id === id));
 function practiceCard() {
   const d = document.createElement('div'); d.className = 'frame practice';
   const levels = Object.entries(S.cfg.botLevels);
@@ -569,7 +573,7 @@ function openDeck(rm) {
   S.room = rm;
   S.sel = []; // the player always chooses their own 5 cards
   $('deckTitle').textContent = rm.name;
-  $('deckSub').textContent = rm.id === 0 ? `Free practice vs ${S.cfg.botLevels[S.botLevel].name} bot · pick 5 cards` : `Entry ${fmt(rm.stake)} FLIP · pick 5 cards`;
+  $('deckSub').textContent = rm.id === 0 ? `Free practice vs ${S.cfg.botLevels[S.botLevel].name} bot · pick 5 cards` : rm.id === 9 ? 'Free fight · no deck cap · pick your 5 hardest hitters' : `Entry ${fmt(rm.stake)} FLIP · pick 5 cards`;
   renderDeck(); show('deck');
 }
 function renderDeck() {
@@ -602,11 +606,11 @@ function renderDeck() {
   $('deckHint').textContent = en > 15 ? `Energy cost is ${en - 15} over 15, so at least one card will play exhausted (half power).` : 'Energy fits: every card can play at full power.';
   const enough = S.me.balance >= rm.stake, ready = S.sel.length === 5 && !over && enough;
   $('enter').disabled = !ready;
-  $('enter').textContent = rm.id === 0 ? `Start practice · ${S.cfg.botLevels[S.botLevel].name} bot` : `Find opponent · lock ${fmt(rm.stake)} FLIP`;
+  $('enter').textContent = rm.id === 0 ? `Start practice · ${S.cfg.botLevels[S.botLevel].name} bot` : rm.id === 9 ? 'Fight the boss' : `Find opponent · lock ${fmt(rm.stake)} FLIP`;
   $('enterNote').textContent = !enough ? 'Not enough FLIP.' : over ? 'Deck power is over the room cap. Swap a strong card for a weaker one.' : S.sel.length < 5 ? `Choose ${5 - S.sel.length} more card${5 - S.sel.length > 1 ? 's' : ''} to start.` : '';
   $('enterNote').className = 'note' + ((over || !enough) ? ' warn' : '');
 }
-$('backLobby').onclick = () => { SFX.click(); setTab('arena'); };
+$('backLobby').onclick = () => { SFX.click(); setTab(S.room && S.room.id === 9 ? 'boss' : 'arena'); };
 $('clearDeck').onclick = () => { S.sel = []; SFX.click(); renderDeck(); };
 $('enter').onclick = async () => {
   const btn = $('enter'); btn.disabled = true;
@@ -616,6 +620,7 @@ $('enter').onclick = async () => {
     S.lastRoomId = S.room.id;
     SFX.lock();
     if (S.room.id === 0) { await emit('practice:start', { level: S.botLevel }); return; }
+    if (S.room.id === 9) { await emit('boss:start', {}); return; }
     const res = await emit('queue:join', { roomId: S.room.id });
     S.me = res.profile; updateTop();
     if (!S.match) startQueueScreen();
@@ -704,7 +709,7 @@ function renderMatch() {
   $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${clanFlag(m.you.clan)}${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>${m.you.bonus ? `<span class="rally-note">RALLY +${m.you.bonus} on your next card</span>` : ''}`;
   $('score').textContent = `${m.opp.wins} : ${m.you.wins}`;
   $('rnd').textContent = `ROUND ${m.round}/5`;
-  $('pot').textContent = m.room.practice ? `PRACTICE · NO STAKES${m.mult > 1 ? ' · ×' + m.mult : ''}` : `Pot ${fmt(m.entry * 2)} FLIP${m.mult > 1 ? ' · ×' + m.mult : ''}`;
+  $('pot').textContent = m.room.boss ? `WORLD BOSS · deal damage` : m.room.practice ? `PRACTICE · NO STAKES${m.mult > 1 ? ' · ×' + m.mult : ''}` : `Pot ${fmt(m.entry * 2)} FLIP${m.mult > 1 ? ' · ×' + m.mult : ''}`;
   $('pot').classList.toggle('doubled', m.mult > 1);
   // FLIP! call: button, answer panel, banner when it's accepted
   $('flipCall').hidden = !m.canCall;
@@ -723,6 +728,7 @@ function renderMatch() {
     if (Date.now() + clockSkew - m.lastFlip.at < 6000) { FX.banner(document.querySelector('#match .board'), `FLIP! ×${m.lastFlip.mult}`, '#c79bff', m.lastFlip.mine ? 'They accepted' : 'You accepted'); SFX.legend(); }
   }
   $('quitPractice').hidden = !m.room.practice;
+  $('quitPractice').textContent = m.room.boss ? 'Give up (no damage)' : 'Quit practice';
 
   // slots + verdict
   const last = m.log[m.log.length - 1];
@@ -848,7 +854,13 @@ function onMatchEnd(r) {
   document.querySelectorAll('#result .promo').forEach(e => e.remove());
   setTimeout(maybeSeasonModal, 2500);
   const rows = [`<dt>Your entry${r.mult > 1 ? ` (×${r.mult})` : ''}</dt><dd class="num">−${fmt(r.stake)}</dd>`];
-  if (r.practice) {
+  if (r.boss) {
+    rows.length = 0;
+    rows.push(`<dt>Boss</dt><dd>${esc(r.boss.name)}</dd>`, `<dt>Your damage</dt><dd class="num boss-hit">${fmt(r.boss.damage)}</dd>`,
+      r.boss.hp != null ? `<dt>Boss health</dt><dd class="num">${fmt(r.boss.hp)} / ${fmt(r.boss.maxHp)}</dd>` : '',
+      r.boss.killed ? `<dt class="tot">FINAL BLOW!</dt><dd class="tot">The boss has fallen. Rewards are paid.</dd>` : `<dt class="tot">FLIP and ELO</dt><dd class="tot">Unchanged</dd>`);
+    r.boss.killed ? SFX.legend() : SFX.round(true);
+  } else if (r.practice) {
     rows.length = 0;
     rows.push(`<dt>Mode</dt><dd>Practice vs ${esc(S.cfg.botLevels[r.level].name)} bot</dd>`, `<dt class="tot">FLIP and ELO</dt><dd class="tot">Unchanged</dd>`);
     r.out === 'win' ? SFX.win() : r.out === 'loss' ? SFX.lose() : null;
@@ -865,20 +877,21 @@ function onMatchEnd(r) {
   if (r.rake) rows.push(`<dt>Fee split</dt><dd class="num">${fmt(r.split.burn)} burned · ${fmt(r.split.treasury)} treasury · ${fmt(r.split.season)} season</dd>`);
   if (r.mult > 1) rows.splice(1, 0, `<dt>FLIP! stakes</dt><dd class="num">×${r.mult}</dd>`);
   if (r.folded) rows.push(`<dt>Ended by</dt><dd>${r.folded === 'me' ? 'You folded a FLIP! call' : `${esc(r.opponent)} folded your FLIP! call`}</dd>`);
-  $('resTitle').textContent = r.out === 'win' ? 'VICTORY' : r.out === 'loss' ? 'DEFEAT' : 'DRAW';
+  $('resTitle').textContent = r.boss ? (r.boss.killed ? 'BOSS DOWN!' : `${fmt(r.boss.damage)} DAMAGE`) : r.out === 'win' ? 'VICTORY' : r.out === 'loss' ? 'DEFEAT' : 'DRAW';
   $('resTitle').style.color = r.out === 'win' ? 'var(--gold)' : r.out === 'loss' ? 'var(--bad)' : 'var(--fg)';
   $('resSub').textContent = r.practice ? `${r.myWins}–${r.oppWins} vs ${r.opponent}` : `${r.myWins}–${r.oppWins} vs ${r.opponent} · ELO ${r.profile.elo} (${r.eloDelta >= 0 ? '+' : ''}${r.eloDelta})`;
-  $('again').textContent = r.practice ? 'Practice again' : 'Play again';
+  $('again').textContent = r.boss ? 'Back to the boss' : r.practice ? 'Practice again' : 'Play again';
   $('ledger').innerHTML = rows.join('');
   drawSprite($('resArt'), r.out === 'win' ? 11 * 31 + 5 : 10 * 31 + 5, r.out === 'win' ? 'fire' : 'water', r.out === 'win' ? 'legendary' : 'epic');
   const rm = roomById(S.lastRoomId);
   $('again').disabled = !rm || S.me.balance < rm.stake;
   show('result');
 }
-$('again').onclick = () => { const rm = roomById(S.lastRoomId); SFX.click(); if (rm) openDeck(rm); };
+$('again').onclick = () => { const rm = roomById(S.lastRoomId); SFX.click(); if (rm && rm.id === 9) return setTab('boss'); if (rm) openDeck(rm); };
 $('quitPractice').onclick = async () => {
+  const wasBoss = S.match && S.match.room.boss;
   try { await emit('match:quit', {}); } catch (e) { toast(e.message); return; }
-  clearInterval(timerT); S.match = null; lockTabs(false); toast('Practice ended.'); setTab('arena');
+  clearInterval(timerT); S.match = null; lockTabs(false); toast(wasBoss ? 'You backed away from the boss.' : 'Practice ended.'); setTab(wasBoss ? 'boss' : 'arena');
 };
 $('toLobby').onclick = () => { SFX.click(); setTab('arena'); };
 
@@ -1385,6 +1398,47 @@ $('clanEditor').onclick = async e => {
   }
 };
 $('clanFound').onclick = () => { SFX.click(); if (S.me.balance < S.cfg.clan.createCost) return toast(`Founding a clan costs ${fmt(S.cfg.clan.createCost)} FLIP.`); openClanEditor(null); };
+
+// ---------- world boss ----------
+const BS = { data: null, clock: null };
+async function renderBoss() {
+  show('boss');
+  try { BS.data = await api('/api/boss'); BS.skew = BS.data.serverNow - Date.now(); } catch (e) { $('bossName').textContent = e.message; return; }
+  const d = BS.data, r = d.rules;
+  Island.setBoss(d.boss);
+  drawBossHero();
+  $('bossTop').innerHTML = d.top.length ? d.top.map(t => `<li>${clanFlag(t.clan)}${esc(t.nickname)}${t.id === S.me.id ? ' (you)' : ''} <b class="num">${fmt(t.damage)}</b></li>`).join('') : '<li>No hits yet. Be the first!</li>';
+  $('bossMine').textContent = d.me.fights ? `You: ${fmt(d.me.damage)} damage in ${d.me.fights} fight${d.me.fights > 1 ? 's' : ''} · best hit ${fmt(d.me.best)}` : 'You haven\'t hit this boss yet.';
+  $('bossRules').innerHTML = [
+    `Everyone gets <b>${r.fightsPerDay} free fights a day</b> (UTC). No entry fee, no ELO change.`,
+    `Damage = <b>${r.damage.perPower} × the total power</b> of your cards + <b>${fmt(r.damage.perRound)}</b> per round won + <b>${fmt(r.damage.win)}</b> for winning the match.`,
+    `If the boss falls this week, everyone who hit it gets <b>${fmt(r.rewards.all)} FLIP</b>.`,
+    `The top 3 damage dealers get <b>${r.rewards.top.map(fmt).join(' / ')} FLIP</b> more and a permanent ☠ badge.`,
+    'The boss plays its own five cards with extra energy. A new boss arrives with every season.',
+  ].map(x => `<li>${x}</li>`).join('');
+  $('bossDeck').replaceChildren(...d.deck.map(c => cardEl(c, { static: true, flip: true })));
+  clearInterval(BS.clock); BS.clock = setInterval(() => { if (current === 'boss') drawBossHero(true); else clearInterval(BS.clock); }, 1000);
+}
+function drawBossHero(clockOnly) {
+  const d = BS.data; if (!d) return;
+  const b = d.boss, left = Math.max(0, b.endsAt - (Date.now() + (BS.skew || 0)));
+  const h = Math.floor(left / 3600000), mi = Math.floor(left / 60000) % 60;
+  $('bossNote').textContent = b.killedAt ? 'Defeated! A new boss comes with the next season.' : `${d.hitters} player${d.hitters === 1 ? '' : 's'} fighting · escapes in ${Math.floor(h / 24)}d ${h % 24}h ${mi}m`;
+  if (clockOnly) return;
+  const cv = $('bossArt'), x = cv.getContext('2d'), img = Island.bossSprite(b.el);
+  cv.width = img.width; cv.height = img.height; x.imageSmoothingEnabled = false; x.clearRect(0, 0, cv.width, cv.height); x.drawImage(img, 0, 0);
+  $('bossTag').textContent = `WORLD BOSS · WEEK ${b.season} · ${elName(b.el)}`;
+  $('bossName').textContent = b.name;
+  const f = b.maxHp ? b.hp / b.maxHp : 0;
+  $('bossHp').style.width = `calc(${(f * 100).toFixed(2)}% - 4px)`; $('bossHp').className = f > .5 ? '' : f > .2 ? 'mid' : 'low';
+  $('bossHpTxt').textContent = `${fmt(b.hp)} / ${fmt(b.maxHp)}`;
+  $('bossMeter').setAttribute('aria-valuenow', b.hp); $('bossMeter').setAttribute('aria-valuemax', b.maxHp);
+  const left2 = d.me.attemptsLeft;
+  $('bossFight').disabled = !!b.killedAt || left2 <= 0;
+  $('bossFight').textContent = b.killedAt ? 'Defeated' : left2 > 0 ? 'Fight the boss' : 'No fights left today';
+  $('bossLeft').textContent = b.killedAt ? '' : `${left2} of ${d.rules.fightsPerDay} fights left today`;
+}
+$('bossFight').onclick = () => { SFX.click(); openDeck(S.cfg.bossRoom); };
 
 // ---------- history ----------
 async function renderHistory() {
