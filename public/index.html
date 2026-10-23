@@ -31,8 +31,8 @@
     <div class="frame login">
       <canvas id="loginArt" width="12" height="12"></canvas>
       <h2>Flip cards. Beat real players.</h2>
-      <p>Connect MetaMask to sign in. New players get 200,000 FLIP, 12 starter cards and 2 free packs.</p>
-      <button class="btn" id="connect">Connect MetaMask</button>
+      <p>Connect any EVM wallet to sign in: MetaMask, Rabby, Coinbase Wallet, Trust, OKX, Phantom and more. New players get 200,000 FLIP, 12 starter cards and 2 free packs.</p>
+      <button class="btn" id="connect">Connect wallet</button>
       <p class="err" id="loginErr" role="alert"></p>
       <div class="facts"><span>FREE SIGNATURE</span><span>NO TRANSACTION</span><span>NO GAS FEES</span></div>
     </div>
@@ -420,6 +420,14 @@
     <h2 id="smTitle"></h2>
     <div id="smBody"></div>
     <button class="btn" type="button" id="smOk">Got it</button>
+  </div>
+</div>
+<div class="modal-wrap" id="walletModal" hidden>
+  <div class="frame modal wallet-modal" role="dialog" aria-modal="true" aria-labelledby="wmTitle">
+    <h2 id="wmTitle">Connect a wallet</h2>
+    <p class="note" id="wmNote">Pick the wallet you want to sign in with. Signing is free: no transaction, no gas.</p>
+    <div class="wallet-list" id="wmList"></div>
+    <button class="btn ghost" type="button" id="wmClose">Cancel</button>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.0/dist/socket.io.min.js"></script>

@@ -212,49 +212,134 @@ $('hudMusic').onclick = () => { FX.setMusic(!FX.musicOn()); updateTop(); SFX.cli
 $('musicBtn').onclick = () => { FX.setMusic(!FX.musicOn()); updateTop(); SFX.click(); };
 $('sfx').onclick = () => { S.sfx = !S.sfx; try { localStorage.setItem('ff-sfx', S.sfx ? '1' : '0'); } catch (e) {} updateTop(); SFX.click(); };
 
-// ---------- wallet sign-in ----------
+// ---------- wallet sign-in (any EVM wallet) ----------
+// Browser wallets announce themselves with EIP-6963, so several can live side by side (MetaMask, Rabby,
+// Coinbase Wallet, OKX, Phantom, Trust...). Old-style wallets that only set window.ethereum still work,
+// phones without a wallet get "open in wallet app" links, and WalletConnect covers everything else
+// (QR code or mobile app) when a project ID is configured on the server.
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const WALLETS = new Map(); // rdns -> { info: { name, icon, rdns }, provider }
+const W = { provider: null, name: '', onChange: null, wc: null }; // the wallet used to sign in
+addEventListener('eip6963:announceProvider', e => {
+  const d = e.detail; if (!d || !d.info || !d.provider) return;
+  WALLETS.set(d.info.rdns || d.info.uuid || d.info.name, d);
+  if (!$('walletModal').hidden) renderWalletList();
+  if (S.token && !W.provider && d.info.rdns === lastWallet()) watchWallet(d.provider, d.info.name);
+});
+dispatchEvent(new Event('eip6963:requestProvider'));
+const lastWallet = () => { try { return localStorage.getItem('ff-wallet') || ''; } catch (e) { return ''; } };
+const safeIcon = i => (typeof i === 'string' && /^data:image\/(svg\+xml|png|jpeg|webp|gif)[;,]/i.test(i) ? i : '');
+// wallet apps whose built-in browser can open the game (used on phones without a wallet)
+function previewSuffix() { let k = ''; try { k = localStorage.getItem('ff-preview') || ''; } catch (e) {} return k ? '?preview=' + encodeURIComponent(k) : ''; }
+function walletLinks() {
+  const url = location.origin + location.pathname + previewSuffix(), bare = location.host + location.pathname + previewSuffix(), enc = encodeURIComponent(url);
+  return [
+    ['MetaMask', 'https://metamask.app.link/dapp/' + bare],
+    ['Trust Wallet', 'https://link.trustwallet.com/open_url?coin_id=60&url=' + enc],
+    ['Coinbase Wallet', 'https://go.cb-w.com/dapp?cb_url=' + enc],
+    ['OKX Wallet', 'okx://wallet/dapp/url?dappUrl=' + enc],
+    ['Phantom', 'https://phantom.app/ul/browse/' + enc + '?ref=' + encodeURIComponent(location.origin)],
+  ];
+}
 function renderLogin(msg) {
   $('walletBar').hidden = true; $('tabs').hidden = true;
   drawSprite($('loginArt'), 11 * 31 + 5, 'fire', 'legendary');
-  const err = $('loginErr'); err.textContent = msg || '';
+  $('loginErr').textContent = msg || '';
   const btn = $('connect');
-  if (!window.ethereum) {
-    btn.textContent = isMobile ? 'Open in MetaMask app' : 'Install MetaMask';
-    btn.onclick = () => {
-      const url = isMobile ? 'https://metamask.app.link/dapp/' + location.host + location.pathname : 'https://metamask.io/download/';
-      window.open(url, '_blank', 'noopener');
-    };
-  } else {
-    btn.textContent = 'Connect MetaMask';
-    btn.onclick = connectWallet;
-  }
+  btn.textContent = 'Connect wallet'; btn.disabled = false;
+  btn.onclick = openWalletPicker;
   show('login');
 }
-async function connectWallet() {
+async function openWalletPicker() {
+  SFX.click();
+  dispatchEvent(new Event('eip6963:requestProvider'));
+  if (!S.cfg) { try { S.cfg = await api('/api/config'); } catch (e) {} }
+  $('walletModal').hidden = false; renderWalletList();
+  const first = $('wmList').querySelector('button'); if (first) first.focus();
+}
+function closeWalletPicker() { $('walletModal').hidden = true; }
+$('wmClose').onclick = closeWalletPicker;
+$('walletModal').onclick = e => { if (e.target === $('walletModal')) closeWalletPicker(); };
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('walletModal').hidden) closeWalletPicker(); });
+function renderWalletList() {
+  const last = lastWallet(), list = [...WALLETS.values()].sort((a, b) => (b.info.rdns === last) - (a.info.rdns === last));
+  const opt = (id, name, icon, tag) => `<button type="button" class="wallet-opt" data-w="${esc(id)}">${icon ? `<img src="${icon}" alt="">` : '<span class="wi">◆</span>'}<span>${esc(name)}</span>${tag ? `<em>${tag}</em>` : ''}</button>`;
+  let html = list.map(d => opt('6963:' + (d.info.rdns || d.info.uuid || d.info.name), d.info.name || 'Wallet', safeIcon(d.info.icon), d.info.rdns === last ? 'LAST USED' : 'DETECTED')).join('');
+  if (!list.length && window.ethereum) html += opt('injected', 'Browser wallet', '', 'DETECTED');
+  if (S.cfg && S.cfg.walletConnectId) html += opt('walletconnect', 'WalletConnect' + (isMobile ? ' (any wallet app)' : ' (scan with phone)'), '', 'QR');
+  if (!list.length && !window.ethereum) {
+    if (isMobile) html += '<h3>OPEN FLIPFIGHT IN YOUR WALLET APP</h3>' + walletLinks().map(([n, u]) => `<a class="wallet-opt" href="${esc(u)}" rel="noopener"><span class="wi">↗</span><span>${esc(n)}</span></a>`).join('');
+    else html += `<p class="note">No browser wallet found. Install one (for example <a href="https://metamask.io/download/" target="_blank" rel="noopener">MetaMask</a> or <a href="https://rabby.io" target="_blank" rel="noopener">Rabby</a>) and reload this page${S.cfg && S.cfg.walletConnectId ? ', or use WalletConnect with a wallet on your phone' : ''}.</p>`;
+  }
+  $('wmList').innerHTML = html;
+}
+$('wmList').onclick = async e => {
+  const b = e.target.closest('button[data-w]'); if (!b) return;
+  const id = b.dataset.w;
+  [...$('wmList').querySelectorAll('button')].forEach(x => (x.disabled = true));
+  try {
+    let provider, name, rdns = '';
+    if (id.startsWith('6963:')) { const d = WALLETS.get(id.slice(5)); provider = d.provider; name = d.info.name; rdns = d.info.rdns || ''; }
+    else if (id === 'injected') { provider = window.ethereum; name = 'your wallet'; }
+    else { b.querySelector('span:not(.wi)').textContent = 'Loading WalletConnect…'; provider = await walletConnectProvider(); name = 'your wallet app'; rdns = 'walletconnect'; }
+    closeWalletPicker();
+    await connectWallet(provider, name, rdns);
+  } catch (err) {
+    closeWalletPicker();
+    $('loginErr').textContent = walletError(err, 'the wallet');
+  }
+};
+// WalletConnect is loaded only when picked (it is large) from jsDelivr, pinned to a version.
+async function walletConnectProvider() {
+  if (W.wc) return W.wc;
+  const { EthereumProvider } = await import('https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.17.0/+esm');
+  const wc = await EthereumProvider.init({
+    projectId: S.cfg.walletConnectId, showQrModal: true, optionalChains: [1, S.cfg.chainId || 4663],
+    metadata: { name: 'Flipfight', description: 'Pixel NFT card duels', url: location.origin, icons: [] },
+  });
+  await wc.connect();
+  W.wc = wc;
+  return wc;
+}
+const walletError = (e, name) => e && (e.code === 4001 || /reject|denied|cancel/i.test(e.message || '')) ? `You cancelled the request in ${name}.`
+  : e && e.code === -32002 ? `${name[0].toUpperCase() + name.slice(1)} already has a request open. Open it to finish.` : (e && e.message) || 'Could not connect to the wallet.';
+const toHexUtf8 = str => '0x' + [...new TextEncoder().encode(str)].map(x => x.toString(16).padStart(2, '0')).join('');
+async function connectWallet(provider, name, rdns) {
   const btn = $('connect'), err = $('loginErr');
   btn.disabled = true; err.textContent = '';
   try {
-    btn.textContent = 'Check MetaMask…';
-    const [address] = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (!address) throw new Error('No account selected in MetaMask.');
+    btn.textContent = `Check ${name}…`;
+    const [address] = await provider.request({ method: 'eth_requestAccounts' });
+    if (!address) throw new Error(`No account selected in ${name}.`);
     const { message } = await api('/api/nonce?address=' + encodeURIComponent(address));
     btn.textContent = 'Sign the message…';
-    const signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+    // hex-encoded text is what every wallet accepts for personal_sign; it still shows as readable text
+    const signature = await provider.request({ method: 'personal_sign', params: [toHexUtf8(message), address] });
     const res = await api('/api/login', { address, signature });
     saveToken(res.token);
+    try { localStorage.setItem('ff-wallet', rdns || ''); } catch (e) {}
+    watchWallet(provider, name);
     SFX.coin();
     await boot();
   } catch (e) {
-    err.textContent = e && e.code === 4001 ? 'You cancelled the request in MetaMask.' : (e.message || 'Could not connect to MetaMask.');
-    btn.textContent = 'Connect MetaMask';
+    err.textContent = walletError(e, name);
+    btn.textContent = 'Connect wallet';
   } finally { btn.disabled = false; }
 }
-if (window.ethereum && window.ethereum.on) window.ethereum.on('accountsChanged', () => { if (S.token) signOut(false, 'Wallet changed. Sign in with the new account.'); });
+// Sign out when the account in the wallet that signed in changes.
+function watchWallet(provider, name) {
+  if (W.provider && W.onChange && W.provider.removeListener) W.provider.removeListener('accountsChanged', W.onChange);
+  W.provider = provider; W.name = name;
+  W.onChange = accs => { if (provider !== W.provider) return; if (S.token && S.me && (!accs || !accs[0] || String(accs[0]).toLowerCase() !== String(S.me.address).toLowerCase())) signOut(false, 'Wallet changed. Sign in with the new account.'); };
+  if (provider && provider.on) provider.on('accountsChanged', W.onChange);
+}
+// after a page reload the session is still valid; reattach the account watcher to the wallet used last
+if (!lastWallet() && window.ethereum) setTimeout(() => { if (S.token && !W.provider) watchWallet(window.ethereum, 'your wallet'); }, 1500);
 
 function signOut(expired, msg) {
   if (S.token && !expired) api('/api/logout', {}).catch(() => {});
   saveToken(null);
+  if (W.wc && !expired) { W.wc.disconnect().catch(() => {}); W.wc = null; }
   if (S.socket) { S.socket.disconnect(); S.socket = null; }
   Island.unmount(); S.me = null; S.match = null; lockTabs(false);
   renderLogin(msg || (expired ? 'Your session ended. Please sign in again.' : ''));

@@ -1,10 +1,10 @@
 # Flipfight
 
-Pixel art NFT kart düellosu. Oyuncular MetaMask ile giriş yapar, takma ad seçer ve gerçek rakiplerle canlı eşleşir. Tüm tokenlar ve kartlar **demo** varlıklardır ve sunucunun veritabanında tutulur; zincire hiçbir işlem gönderilmez.
+Pixel art NFT kart düellosu. Oyuncular herhangi bir EVM cüzdanıyla (MetaMask, Rabby, Coinbase Wallet, Trust, OKX, Phantom…) giriş yapar, takma ad seçer ve gerçek rakiplerle canlı eşleşir. Tüm tokenlar ve kartlar **demo** varlıklardır ve sunucunun veritabanında tutulur; zincire hiçbir işlem gönderilmez.
 
 ## Neler var
 
-- **MetaMask ile giriş:** Oyuncu ücretsiz bir mesaj imzalar (işlem değil, gas yok). Sunucu imzayı doğrular ve 30 günlük oturum açar.
+- **Cüzdanla giriş (tüm EVM cüzdanları):** Oyuncu ücretsiz bir mesaj imzalar (işlem değil, gas yok). Sunucu imzayı doğrular ve 30 günlük oturum açar.
 - **Takma ad:** İlk girişte seçilir, benzersizdir ve değiştirilemez. Lider tablosunda bu görünür.
 - **Başlangıç paketi:** Her yeni oyuncuya 200.000 FLIP, 12 başlangıç kartı ve 2 ücretsiz paket.
 - **Gerçek zamanlı PvP:** Oda kuyrukları, sunucu tarafında oynanan maçlar, 20 saniyelik tur süresi (süre dolarsa rastgele kart oynanır), sayfa yenilense bile maça geri dönme.
@@ -89,9 +89,12 @@ Varsayılan olarak açık. Siteye gelenler tanıtım sayfasını görür; oyun, 
 - **Önizleme:** Render'da `PREVIEW_KEY` değişkenine gizli bir değer gir. `https://flipfight.fun/?preview=GIZLI_DEGER` adresini bir kez açan tarayıcı 90 gün boyunca oyuna girebilir.
 - **Açılış:** Render'da `COMING_SOON` değişkenini `off` yap. Servis yeniden başlar ve oyun herkese açılır.
 
-## Mobil oyuncular
+## Cüzdanlar ve mobil oyuncular
 
-Mobil tarayıcılarda MetaMask eklentisi yoktur. Site bunu algılar ve "Open in MetaMask app" düğmesi gösterir; oyun MetaMask uygulamasının içindeki tarayıcıda açılır.
+- **Tarayıcı cüzdanları:** EIP-6963 ile yüklü tüm cüzdanlar listelenir (MetaMask, Rabby, Coinbase Wallet, OKX, Phantom, Brave, Trust eklentisi…). Eski tip cüzdanlar "Browser wallet" olarak çıkar. Son kullanılan cüzdan en üstte durur. Giriş yapılan cüzdanda hesap değişirse oturum kapanır.
+- **Cüzdansız telefon:** MetaMask, Trust, Coinbase Wallet, OKX ve Phantom uygulamalarının içindeki tarayıcıda açma bağlantıları gösterilir.
+- **WalletConnect (isteğe bağlı):** Telefondaki herhangi bir cüzdanla QR kodla bağlanmak için [cloud.reown.com](https://cloud.reown.com) üzerinden ücretsiz bir proje oluştur, proje ID'sini Render'a `WALLETCONNECT_PROJECT_ID` olarak ekle ve Reown panelinde izinli alan adına `flipfight.fun` yaz. Ayarlanmazsa bu seçenek görünmez.
+- Akıllı sözleşme cüzdanları (ör. Coinbase Smart Wallet passkey hesapları, Safe) şu an desteklenmiyor; giriş imzası normal (EOA) hesap ister.
 
 ## Proje yapısı
 
