@@ -18,6 +18,13 @@ Pixel art NFT kart düellosu. Oyuncular MetaMask ile giriş yapar, takma ad seç
 - **Forge (kart birleştirme):** Aynı nadirlikte 2-4 kart birleştirilir. Başarı şansı `1 − (1 − taban)^(kart − 1)`; tabanlar common→rare %40, rare→epic %25, epic→legendary %12. Başarıda bir üst nadirlikte rastgele kart, başarısızlıkta aynı nadirlikte rastgele bir kart geri gelir; kullanılan kartlar her durumda harcanır ve ücret (5.000 / 20.000 / 60.000 FLIP) yakılır. Oyuncu en az 5 kartla kalır. Oranlar ve beklenen maliyetler: `node scripts/fusion-sim.js`.
 - **Bota karşı antrenman:** Ücretsiz, her zaman açık; FLIP, ELO ve maç geçmişini etkilemez. Easy, Normal ve Hard seviyeleri var; bot senin destenin aynısıyla oynar (ayna maç), sonucu sadece hamleler belirler.
 
+## Ada (ana ekran)
+
+Girişten sonra oyuncular ortak bir piksel adada başlar (`public/island.js`, `server/island.js`).
+- Her oyuncunun cüzdan adresinden üretilen kendine özel bir karakteri vardır. Dokunulan yere engellerin etrafından dolaşarak yürür (karo haritası üzerinde yol bulma); bilgisayarda ok tuşları ve WASD da çalışır.
+- Binalar: Arena, Ranks, Shop, Market, Forge, Cards (koleksiyon), History. Kapısına yürünen ya da dokunulan bina ilgili bölümü açar; dönünce oyuncu o binanın önünde belirir. MENU düğmesi binalara kısayol verir.
+- Adadaki herkes gerçek zamanlı görünür (saniyede 10 güncelleme) ve HI!, GG, WOW gibi tepki baloncukları gönderebilir. Ada konumları sadece görseldir; sunucu sınırlandırır ve hız sınırı uygular.
+
 ## Atmosfer
 
 `public/fx.js` tamamen tarayıcıda üretilen müzik, sahne ve savaş efektlerini içerir; ses ya da görsel dosyası yoktur.

@@ -9,6 +9,7 @@ const db = require('./db');
 const G = require('../shared/game');
 const { createMatchmaker } = require('./match');
 const { createSeasons } = require('./season');
+const { createIsland } = require('./island');
 
 const PORT = Number(process.env.PORT) || 3000;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -488,7 +489,8 @@ io.use((socket, next) => {
 
 const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf });
 const seasons = createSeasons({ db, G, io });
-io.on('connection', socket => matchmaker.onConnection(socket));
+const island = createIsland({ io, q, G });
+io.on('connection', socket => { matchmaker.onConnection(socket); island.onConnection(socket); });
 
 setInterval(() => {
   db.query('DELETE FROM sessions WHERE expires_at < $1', [now()]).catch(() => {});

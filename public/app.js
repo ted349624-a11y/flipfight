@@ -144,11 +144,13 @@ function backEl() { const d = document.createElement('div'); d.className = 'back
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
 // ---------- screens ----------
-const SCREENS = ['login', 'nickname', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'history'];
+const SCREENS = ['login', 'nickname', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'history'];
 let current = null;
 function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
+  if (id !== 'island') Island.unmount();
   current = id; SCREENS.forEach(s => ($(s).hidden = s !== id));
+  if (S.me && S.me.nickname && id !== 'login' && id !== 'nickname') $('tabs').hidden = id === 'island';
   if (id !== 'forge') $('fgBar').hidden = true;
   atmosphere(id);
   $('guide').hidden = !(id === 'login' || id === 'arena');
@@ -177,7 +179,7 @@ function setTab(tab) {
   if (S.match) return;
   S.tab = tab;
   [...$('tabs').children].forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ({ arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, history: renderHistory })[tab]();
+  ({ island: renderIsland, arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, history: renderHistory })[tab]();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { SFX.click(); setTab(b.dataset.tab); } };
 function lockTabs(on) { [...$('tabs').children].forEach(b => { b.disabled = on; b.style.opacity = on ? .45 : 1; }); }
@@ -237,7 +239,7 @@ function signOut(expired, msg) {
   if (S.token && !expired) api('/api/logout', {}).catch(() => {});
   saveToken(null);
   if (S.socket) { S.socket.disconnect(); S.socket = null; }
-  S.me = null; S.match = null; lockTabs(false);
+  Island.unmount(); S.me = null; S.match = null; lockTabs(false);
   renderLogin(msg || (expired ? 'Your session ended. Please sign in again.' : ''));
 }
 $('logout').onclick = () => signOut(false);
@@ -275,7 +277,7 @@ async function refreshMe() {
 function enterApp() {
   $('walletBar').hidden = false; $('tabs').hidden = false; updateTop();
   connectSocket();
-  setTab('arena');
+  setTab('island');
   maybeSeasonModal();
 }
 // ---------- season end popup ----------
@@ -302,6 +304,7 @@ function connectSocket() {
   const auth = { token: S.token, preview: PREVIEW };
   const s = API ? io(API, { auth }) : io({ auth });
   S.socket = s;
+  s.on('connect', () => { if (current === 'island') renderIsland(); }); // rejoin the island after a reconnect
   s.on('connect_error', err => {
     if (err.message === 'unauthorized') signOut(true);
     else if (err.message === 'nickname_required') renderNickname();
@@ -328,6 +331,23 @@ function emit(ev, data) {
     });
   });
 }
+
+// ---------- island (home) ----------
+const BUILDING_TAB = { arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', history: 'history' };
+function renderIsland() {
+  show('island');
+  Island.mount($('islandView'), {
+    socket: S.socket, me: S.me,
+    onEnter: id => { SFX.found(); setTab(BUILDING_TAB[id]); },
+    onCount: n => { $('islandOnline').textContent = `● ${n} ON THE ISLAND`; },
+  });
+  $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" class="btn ghost" data-b="${b.id}">${b.label}</button>`).join('');
+}
+$('islandMenu').onclick = () => {
+  const open = $('islandQuick').hidden; $('islandQuick').hidden = !open; $('islandMenu').setAttribute('aria-expanded', open); SFX.click();
+};
+$('islandQuick').onclick = e => { const b = e.target.closest('[data-b]'); if (b) { SFX.click(); setTab(BUILDING_TAB[b.dataset.b]); } };
+$('emotes').onclick = e => { const b = e.target.closest('[data-e]'); if (b) { Island.emote(b.dataset.e); SFX.click(); } };
 
 // ---------- arena ----------
 const roomById = id => (id === 0 ? S.cfg.practice : S.cfg.rooms.find(x => x.id === id));

@@ -482,3 +482,16 @@ table.lb tr.top1 td:first-child{color:#ffcc33} table.lb tr.top2 td:first-child{c
 .card:nth-child(3n+1) .art{animation-delay:-.9s} .card:nth-child(3n+2) .art{animation-delay:-1.7s}
 @keyframes breathe{50%{transform:scale(1,.965)}}
 @media (prefers-reduced-motion:reduce){.card .art,.board.shake,.fx-banner,#bg.scene-in{animation:none!important}}
+
+/* ---------- island ---------- */
+.island-top{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.island-top h2{font-size:16px;color:var(--gold)}
+.island-frame{padding:0;overflow:hidden;--b:var(--line);line-height:0}
+.island-canvas{display:block;width:100%;image-rendering:pixelated;touch-action:none;cursor:pointer;background:#0d1638}
+.island-quick{display:flex;flex-wrap:wrap;gap:4px}
+.island-quick .btn{font-size:9px;padding:9px 10px}
+.emotes{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.emotes button{all:unset;cursor:pointer;font-family:var(--font-px);font-size:10px;padding:9px 12px;background:var(--panel);color:var(--fg);box-shadow:0 0 0 3px var(--line)}
+.emotes button:active{transform:translateY(2px)}
+.emotes button:focus-visible{outline:3px dashed var(--wind);outline-offset:4px}
+nav.tabs button.tab-island{color:var(--gold)}
