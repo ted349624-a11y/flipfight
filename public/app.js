@@ -396,12 +396,13 @@ function afterNick() { if (needX()) renderXQuests(); else enterApp(); }
 const XQ_INFO = {
   follow: ['Follow', h => `Follow @${h} on X`],
   notify: ['Bell', h => `Turn on notifications 🔔 for @${h}`],
-  like: ['Like', () => 'Like our post'],
-  repost: ['Repost', () => 'Repost it'],
-  reply: ['Reply', () => 'Reply to the post'],
+  like: ['Like', (h, id) => id ? 'Like our post' : `Like @${h}'s latest post`],
+  repost: ['Repost', (h, id) => id ? 'Repost it' : 'Repost the latest post'],
+  reply: ['Reply', (h, id) => id ? 'Reply to the post' : 'Reply to the latest post'],
 };
 function xqUrl(t) {
   const x = S.cfg.xQuests, H = encodeURIComponent(x.handle);
+  if (!x.tweetId && t !== 'follow') return `https://x.com/${H}`; // no post set: open the profile and use the latest post
   return {
     follow: `https://x.com/intent/follow?screen_name=${H}`,
     notify: `https://x.com/${H}`,
@@ -430,7 +431,7 @@ function drawXQ() {
     const state = XQ.done[t] ? 'done' : XQ.pending && XQ.pending.t === t ? 'wait' : '';
     li.className = 'xq-task ' + state;
     li.innerHTML = `<span class="xq-n">${XQ.done[t] ? '✓' : i + 1}</span><span class="xq-t"></span><a class="btn ghost small" target="_blank" rel="noopener"></a>`;
-    li.querySelector('.xq-t').textContent = XQ_INFO[t][1](x.handle);
+    li.querySelector('.xq-t').textContent = XQ_INFO[t][1](x.handle, x.tweetId);
     const a = li.querySelector('a');
     a.href = xqUrl(t);
     a.textContent = XQ.done[t] ? 'Done' : state === 'wait' ? 'Checking…' : XQ_INFO[t][0];
