@@ -150,6 +150,7 @@ function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
   if (id !== 'island') Island.unmount();
   current = id; SCREENS.forEach(s => ($(s).hidden = s !== id));
+  document.body.classList.toggle('on-island', id === 'island');
   if (S.me && S.me.nickname && id !== 'login' && id !== 'nickname') $('tabs').hidden = id === 'island';
   if (id !== 'forge') $('fgBar').hidden = true;
   atmosphere(id);
@@ -191,7 +192,12 @@ function updateTop() {
   $('nick').textContent = p.nickname || ''; $('addr').textContent = shortAddr(p.address);
   $('sfx').setAttribute('aria-pressed', S.sfx); $('sfx').textContent = S.sfx ? 'SFX ON' : 'SFX OFF';
   $('musicBtn').setAttribute('aria-pressed', FX.musicOn()); $('musicBtn').textContent = FX.musicOn() ? 'MUSIC ON' : 'MUSIC OFF';
+  $('hudNick').textContent = p.nickname || ''; $('hudBal').textContent = fmt(p.balance);
+  if (S.cfg) $('hudTier').innerHTML = `${tierBadge(p.elo)} <span class="num">${p.elo}</span>`;
+  $('hudMusic').setAttribute('aria-pressed', FX.musicOn());
+  const sb = document.querySelector('#islandQuick [data-act=sfx]'); if (sb) sb.textContent = S.sfx ? 'SOUND FX: ON' : 'SOUND FX: OFF';
 }
+$('hudMusic').onclick = () => { FX.setMusic(!FX.musicOn()); updateTop(); SFX.click(); };
 $('musicBtn').onclick = () => { FX.setMusic(!FX.musicOn()); updateTop(); SFX.click(); };
 $('sfx').onclick = () => { S.sfx = !S.sfx; try { localStorage.setItem('ff-sfx', S.sfx ? '1' : '0'); } catch (e) {} updateTop(); SFX.click(); };
 
@@ -334,19 +340,31 @@ function emit(ev, data) {
 
 // ---------- island (home) ----------
 const BUILDING_TAB = { arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', history: 'history' };
+let hintTimer = 0;
 function renderIsland() {
   show('island');
   Island.mount($('islandView'), {
     socket: S.socket, me: S.me,
     onEnter: id => { SFX.found(); setTab(BUILDING_TAB[id]); },
-    onCount: n => { $('islandOnline').textContent = `● ${n} ON THE ISLAND`; },
+    onCount: n => { $('islandOnline').textContent = `● ${n} ONLINE`; },
   });
-  $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" class="btn ghost" data-b="${b.id}">${b.label}</button>`).join('');
+  $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" data-b="${b.id}">${b.label}</button>`).join('') +
+    '<hr><button type="button" data-act="sfx"></button><button type="button" class="muted" data-act="out">SIGN OUT</button>';
+  closeIslandMenu(); updateTop();
+  $('islandHint').classList.remove('gone'); clearTimeout(hintTimer); hintTimer = setTimeout(() => $('islandHint').classList.add('gone'), 6000);
 }
+function closeIslandMenu() { $('islandQuick').hidden = true; $('islandMenu').setAttribute('aria-expanded', false); }
 $('islandMenu').onclick = () => {
   const open = $('islandQuick').hidden; $('islandQuick').hidden = !open; $('islandMenu').setAttribute('aria-expanded', open); SFX.click();
 };
-$('islandQuick').onclick = e => { const b = e.target.closest('[data-b]'); if (b) { SFX.click(); setTab(BUILDING_TAB[b.dataset.b]); } };
+$('islandQuick').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  SFX.click();
+  if (b.dataset.b) { closeIslandMenu(); setTab(BUILDING_TAB[b.dataset.b]); }
+  else if (b.dataset.act === 'sfx') { $('sfx').click(); }
+  else if (b.dataset.act === 'out') { closeIslandMenu(); $('logout').click(); }
+};
+$('islandView').addEventListener('pointerdown', closeIslandMenu);
 $('emotes').onclick = e => { const b = e.target.closest('[data-e]'); if (b) { Island.emote(b.dataset.e); SFX.click(); } };
 
 // ---------- arena ----------

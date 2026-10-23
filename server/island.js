@@ -1,6 +1,6 @@
 // Shared island: who is walking around, where, and quick emotes.
 // Positions are cosmetic (nothing is won or lost on the island), so the server only clamps and rate-limits them.
-const WORLD = { w: 48 * 16, h: 34 * 16 };
+const WORLD = { w: 52 * 16, h: 38 * 16 };
 const EMOTES = ['hi', 'gg', 'wow', 'lol', 'fire', 'heart'];
 
 function createIsland({ io, q, G }) {
