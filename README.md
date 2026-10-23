@@ -86,10 +86,9 @@ node scripts/season-test.js http://localhost:3000 KEY play   # sezon maçları; 
 
 Oyun herkese açık. Yeni bir oyuncu cüzdanını bağlayıp nickname'ini seçtikten sonra **bir kez** X kullanıcı adını yazar ve 5 görevi yapar: takip et, bildirimleri aç 🔔, gönderiyi beğen, repost et, yanıt yaz. Hepsi bitince oyuna girer; bir daha sorulmaz. Kurucu hesabı bu adımı atlar.
 
-- `X_HANDLE`: takip edilecek hesap (ör. `flipfightfun`, @ olmadan da olur).
-- `X_TWEET_URL`: beğenilecek / repost edilecek / yanıtlanacak gönderinin linki (ör. `https://x.com/flipfightfun/status/123…`).
+- `X_HANDLE`: takip edilecek hesap. Varsayılan `flipfight` (x.com/flipfight); kapatmak için `off`.
+- `X_TWEET_URL`: beğenilecek / repost edilecek / yanıtlanacak gönderinin linki (ör. `https://x.com/flipfight/status/123…`). Boşsa sadece takip + bildirim görevleri çıkar.
 - `X_REPLY_TEXT` (isteğe bağlı): yanıt kutusuna hazır gelen metin.
-- İkisinden biri boşsa adım kapalıdır ve oyuncular doğrudan oyuna girer.
 - Görevler X'in kendi sayfalarında açılır; oyuncu sekmeye geri döndüğünde işaretlenir. X ücretsiz olarak bu eylemleri doğrulatmaz (ücretli X API gerekir), bu yüzden kontrol güvene dayalıdır. Sunucu yine de her görevin işaretlenmesini, geçerli bir kullanıcı adını ve her X hesabının yalnızca bir oyuncuya bağlanmasını zorunlu tutar.
 
 "Coming soon" sayfası artık varsayılan olarak kapalı. Gerekirse `COMING_SOON=on` ile geri açılır (`PREVIEW_KEY` ile önizleme yine çalışır).

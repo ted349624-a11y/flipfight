@@ -30,13 +30,14 @@ const COMING_SOON = /^(on|true|1|yes)$/i.test(process.env.COMING_SOON || 'off');
 // One-time X (Twitter) onboarding: before playing, every account gives its X username and completes a few tasks
 // (follow, like, repost, reply, turn on notifications) on X_HANDLE's account and the X_TWEET_URL post.
 // X doesn't let a free site check these, so each task opens X and is ticked off when the player comes back.
-// Leave X_HANDLE or X_TWEET_URL empty to switch the onboarding off.
-const X_HANDLE = (process.env.X_HANDLE || '').trim().replace(/^@/, '');
+// X_HANDLE defaults to @flipfight (X_HANDLE=off switches the onboarding off).
+const X_HANDLE = /^(off|false|0|no)$/i.test((process.env.X_HANDLE || '').trim()) ? '' : ((process.env.X_HANDLE || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').replace(/\/.*$/, '') || 'flipfight');
 const X_TWEET_ID = ((process.env.X_TWEET_URL || '').match(/status(?:es)?\/(\d+)/) || [])[1] || (/^\d+$/.test((process.env.X_TWEET_URL || '').trim()) ? process.env.X_TWEET_URL.trim() : '');
-const X_QUESTS = /^[A-Za-z0-9_]{1,15}$/.test(X_HANDLE) && X_TWEET_ID ? {
-  handle: X_HANDLE, tweetId: X_TWEET_ID,
+// Without a post link only the follow + notifications tasks are shown.
+const X_QUESTS = /^[A-Za-z0-9_]{1,15}$/.test(X_HANDLE) ? {
+  handle: X_HANDLE, tweetId: X_TWEET_ID || null,
   reply: (process.env.X_REPLY_TEXT || 'Flipping cards on the island! ⚔️ flipfight.fun').slice(0, 200),
-  tasks: ['follow', 'notify', 'like', 'repost', 'reply'],
+  tasks: X_TWEET_ID ? ['follow', 'notify', 'like', 'repost', 'reply'] : ['follow', 'notify'],
 } : null;
 const needsX = u => !!X_QUESTS && !!u && !u.x_done_at && !isFounder(u);
 const X_FREE = new Set(['/api/me', '/api/x-quests', '/api/logout', '/api/nickname']);
