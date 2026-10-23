@@ -22,6 +22,16 @@ const S = {
 try { S.token = localStorage.getItem('ff-token'); S.sfx = localStorage.getItem('ff-sfx') !== '0'; S.botLevel = localStorage.getItem('ff-bot') || 'normal'; } catch (e) {}
 const saveToken = t => { S.token = t; try { t ? localStorage.setItem('ff-token', t) : localStorage.removeItem('ff-token'); } catch (e) {} };
 
+// ---------- preview access (coming-soon mode) ----------
+// A ?preview=KEY link is remembered in local storage and sent with every request,
+// so testers stay in even if the wallet's browser drops cookies.
+let PREVIEW = '';
+try {
+  const u = new URL(location.href), k = u.searchParams.get('preview');
+  if (k) { localStorage.setItem('ff-preview', k); u.searchParams.delete('preview'); history.replaceState(null, '', u.pathname + u.search + u.hash); }
+  PREVIEW = localStorage.getItem('ff-preview') || '';
+} catch (e) {}
+
 // ---------- api ----------
 const API = (window.FLIPFIGHT_API || '').replace(/\/$/, '');
 async function api(path, body) {
@@ -29,7 +39,7 @@ async function api(path, body) {
   try {
     res = await fetch(API + path, {
       method: body === undefined ? 'GET' : 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, S.token ? { Authorization: 'Bearer ' + S.token } : {}),
+      headers: Object.assign({ 'Content-Type': 'application/json' }, S.token ? { Authorization: 'Bearer ' + S.token } : {}, PREVIEW ? { 'X-Preview-Key': PREVIEW } : {}),
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (e) { throw new Error('Cannot reach the game server. Check your connection and try again.'); }
@@ -247,7 +257,8 @@ function enterApp() {
 // ---------- realtime ----------
 function connectSocket() {
   if (S.socket) return;
-  const s = API ? io(API, { auth: { token: S.token } }) : io({ auth: { token: S.token } });
+  const auth = { token: S.token, preview: PREVIEW };
+  const s = API ? io(API, { auth }) : io({ auth });
   S.socket = s;
   s.on('connect_error', err => {
     if (err.message === 'unauthorized') signOut(true);

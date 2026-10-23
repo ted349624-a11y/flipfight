@@ -18,15 +18,18 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => 
 
 // Coming-soon mode: visitors see a teaser page while the game keeps running behind it.
 // On by default. Set COMING_SOON=off on the host to open the game to everyone.
-// Anyone who opens /?preview=<PREVIEW_KEY> once gets a cookie that lets them in.
+// Anyone who opens /?preview=<PREVIEW_KEY> gets in. The key is kept in a cookie and also in the
+// page's local storage (sent as a header), so it still works in wallet browsers that drop cookies.
 const COMING_SOON = !/^(off|false|0|no)$/i.test(process.env.COMING_SOON || 'on');
-const PREVIEW_KEY = process.env.PREVIEW_KEY || '';
+const PREVIEW_KEY = (process.env.PREVIEW_KEY || '').trim();
 const PREVIEW_COOKIE = 'ff_preview';
 function readCookie(header, name) {
   const m = (header || '').match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
   return m ? decodeURIComponent(m[1]) : '';
 }
-const hasPreview = cookieHeader => !!PREVIEW_KEY && readCookie(cookieHeader, PREVIEW_COOKIE) === PREVIEW_KEY;
+const keyOk = k => !!PREVIEW_KEY && String(k || '').trim() === PREVIEW_KEY;
+const hasPreview = (cookieHeader, headerKey) => keyOk(readCookie(cookieHeader, PREVIEW_COOKIE)) || keyOk(headerKey);
+const GAME_PAGES = new Set(['/', '/index.html']);
 
 const app = express();
 app.set('trust proxy', 1);
@@ -48,11 +51,14 @@ app.use(express.json({ limit: '20kb' }));
 if (COMING_SOON) {
   app.use((req, res, next) => {
     if (req.path === '/healthz') return next();
-    if (PREVIEW_KEY && req.query.preview === PREVIEW_KEY) {
-      res.setHeader('Set-Cookie', `${PREVIEW_COOKIE}=${encodeURIComponent(PREVIEW_KEY)}; Path=/; Max-Age=${60 * 60 * 24 * 90}; HttpOnly; SameSite=Lax${req.secure ? '; Secure' : ''}`);
-      return res.redirect('/');
+    // Scripts, styles and images are not secret (the game code is public); only the game page and the API are gated.
+    if (!GAME_PAGES.has(req.path) && !req.path.startsWith('/api/') && /\.[a-z0-9]+$/i.test(req.path)) return next();
+    if (keyOk(req.query.preview)) {
+      res.setHeader('Set-Cookie', `${PREVIEW_COOKIE}=${encodeURIComponent(PREVIEW_KEY)}; Path=/; Max-Age=${60 * 60 * 24 * 90}; SameSite=Lax${req.secure ? '; Secure' : ''}`);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.sendFile(path.join(__dirname, '..', 'public', 'index.html')); // serve the game right away, no redirect
     }
-    if (hasPreview(req.headers.cookie)) return next();
+    if (hasPreview(req.headers.cookie, req.get('x-preview-key'))) return next();
     if (req.path.startsWith('/api/')) return res.status(503).json({ error: 'Flipfight is coming soon.' });
     res.setHeader('Cache-Control', 'no-store');
     res.sendFile(path.join(__dirname, '..', 'public', 'coming-soon.html'));
@@ -286,14 +292,14 @@ app.get('/api/history', auth, route(async (req, res) => {
   });
 }));
 
-app.get('/healthz', (req, res) => res.json({ ok: true, comingSoon: COMING_SOON }));
+app.get('/healthz', (req, res) => res.json({ ok: true, comingSoon: COMING_SOON, previewKeySet: !!PREVIEW_KEY }));
 
 // ---------- realtime ----------
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : false } });
 
 io.use((socket, next) => {
-  if (COMING_SOON && !hasPreview(socket.handshake.headers.cookie)) return next(new Error('coming_soon'));
+  if (COMING_SOON && !hasPreview(socket.handshake.headers.cookie, socket.handshake.auth && socket.handshake.auth.preview)) return next(new Error('coming_soon'));
   sessionUser(socket.handshake.auth && socket.handshake.auth.token).then(user => {
     if (!user) return next(new Error('unauthorized'));
     if (!user.nickname) return next(new Error('nickname_required'));
