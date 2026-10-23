@@ -96,9 +96,7 @@ async function createUser(address) {
     if (!u) return db.one('SELECT * FROM users WHERE address = $1', [address], c); // created by a parallel login
     const uids = [];
     for (const tpl of G.ECONOMY.starterTemplates) uids.push((await q.insertCard(u.id, tpl, c)).uid);
-    await q.upsertDeck(u.id, 1, [uids[0], uids[3], uids[5], uids[6], uids[4]], c);
-    await q.upsertDeck(u.id, 2, [uids[11], uids[9], uids[6], uids[8], uids[0]], c);
-    await q.upsertDeck(u.id, 3, [uids[11], uids[9], uids[10], uids[6], uids[8]], c);
+    // no pre-built decks: players choose their own 5 cards before every match
     return u;
   });
 }

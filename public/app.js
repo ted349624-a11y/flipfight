@@ -333,8 +333,7 @@ const byUid = uid => S.cards.find(c => c.uid === uid);
 const sortedCards = () => S.cards.slice().sort((a, b) => rar(b.rar).rank - rar(a.rar).rank || b.pow - a.pow);
 function openDeck(rm) {
   S.room = rm;
-  // practice falls back to the Rookie deck so new players can start with one tap
-  S.sel = (S.decks[rm.id] || (rm.id === 0 ? S.decks[1] : null) || []).filter(byUid).slice(0, 5);
+  S.sel = []; // the player always chooses their own 5 cards
   $('deckTitle').textContent = rm.name;
   $('deckSub').textContent = rm.id === 0 ? `Free practice vs ${S.cfg.botLevels[S.botLevel].name} bot · pick 5 cards` : `Entry ${fmt(rm.stake)} FLIP · pick 5 cards`;
   renderDeck(); show('deck');
@@ -358,14 +357,22 @@ function renderDeck() {
   $('bPow').style.background = over ? 'var(--bad)' : 'var(--good)';
   $('mEn').textContent = `${en} / 15`; $('mEn').className = 'num' + (en > 15 ? ' warn' : '');
   $('bEn').style.width = Math.min(en / 15, 1) * 100 + '%'; $('bEn').style.background = en > 15 ? 'var(--gold)' : 'var(--wind)';
+  const need = 5 - S.sel.length;
+  $('pcSlots').innerHTML = [0, 1, 2, 3, 4].map(i => { const c = cs[i]; return `<i class="${c ? 'on e-' + c.el : ''}"></i>`; }).join('');
+  $('pickCall').classList.toggle('done', need === 0);
+  $('pcTitle').textContent = need === 0 ? 'DECK READY' : need === 5 ? 'CHOOSE 5 CARDS' : `CHOOSE ${need} MORE CARD${need > 1 ? 'S' : ''}`;
+  $('pcSub').textContent = need === 0 ? 'Tap a selected card to swap it out, or start the match.' : need === 5 ? 'Tap cards below to add them to your deck. Each card can be used once per match.' : 'Tap a card to add it, tap again to remove it.';
+  $('clearDeck').hidden = S.sel.length === 0;
+  $('deckHint').hidden = S.sel.length === 0;
   $('deckHint').textContent = en > 15 ? `Energy cost is ${en - 15} over 15, so at least one card will play exhausted (half power).` : 'Energy fits: every card can play at full power.';
   const enough = S.me.balance >= rm.stake, ready = S.sel.length === 5 && !over && enough;
   $('enter').disabled = !ready;
   $('enter').textContent = rm.id === 0 ? `Start practice · ${S.cfg.botLevels[S.botLevel].name} bot` : `Find opponent · lock ${fmt(rm.stake)} FLIP`;
-  $('enterNote').textContent = !enough ? 'Not enough FLIP.' : over ? 'Deck power is over the room cap.' : S.sel.length < 5 ? `Pick ${5 - S.sel.length} more.` : '';
+  $('enterNote').textContent = !enough ? 'Not enough FLIP.' : over ? 'Deck power is over the room cap. Swap a strong card for a weaker one.' : S.sel.length < 5 ? `Choose ${5 - S.sel.length} more card${5 - S.sel.length > 1 ? 's' : ''} to start.` : '';
   $('enterNote').className = 'note' + ((over || !enough) ? ' warn' : '');
 }
 $('backLobby').onclick = () => { SFX.click(); setTab('arena'); };
+$('clearDeck').onclick = () => { S.sel = []; SFX.click(); renderDeck(); };
 $('enter').onclick = async () => {
   const btn = $('enter'); btn.disabled = true;
   try {

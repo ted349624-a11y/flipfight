@@ -79,6 +79,11 @@
       <div><h2 id="deckTitle">Build your deck</h2><p class="note" id="deckSub"></p></div>
       <button class="btn ghost" id="backLobby">‹ Rooms</button>
     </div>
+    <div class="frame pickcall" id="pickCall" role="status" aria-live="polite">
+      <div class="pc-slots" id="pcSlots" aria-hidden="true"></div>
+      <div class="pc-text"><b id="pcTitle">CHOOSE 5 CARDS</b><span id="pcSub">Tap cards below to add them to your deck.</span></div>
+      <button class="btn ghost" type="button" id="clearDeck" hidden>Clear</button>
+    </div>
     <div class="frame tray">
       <div class="meter"><span>Cards picked</span><b class="num" id="mCount">0 / 5</b><div class="bar"><i id="bCount"></i></div></div>
       <div class="meter"><span>Deck power / room cap</span><b class="num" id="mPow">0</b><div class="bar"><i id="bPow"></i></div></div>

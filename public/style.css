@@ -341,3 +341,16 @@ body{background:transparent}
 .p-levels button{all:unset;cursor:pointer;font-family:var(--font-px);font-size:8px;padding:9px 10px;color:var(--muted);box-shadow:0 0 0 3px var(--line)}
 .p-levels button[aria-checked="true"]{color:#0b1a22;background:var(--wind);box-shadow:0 0 0 3px #3e8fb0}
 .p-levels button:focus-visible{outline:3px dashed var(--gold);outline-offset:4px}
+
+/* ---------- deck: choose-your-cards call to action ---------- */
+.pickcall{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 16px;--b:var(--gold);animation:pcPulse 1.6s steps(2) infinite}
+.pickcall.done{--b:var(--good);animation:none}
+.pc-slots{display:flex;gap:6px}
+.pc-slots i{width:18px;height:26px;background:#0e0c1a;box-shadow:0 0 0 2px var(--line) inset}
+.pc-slots i.on{box-shadow:0 0 0 2px #0b0916 inset}
+.pc-text{display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px}
+.pc-text b{font-family:var(--font-px);font-size:12px;font-weight:400;color:var(--gold);line-height:1.5}
+.pickcall.done .pc-text b{color:var(--good)}
+.pc-text span{font-size:19px;color:var(--muted)}
+@keyframes pcPulse{50%{--b:var(--gold-d)}}
+@media (prefers-reduced-motion:reduce){.pickcall{animation:none}}

@@ -1,13 +1,14 @@
 // End-to-end check: two wallets sign in, pick nicknames, open a free pack and play a full match.
-// Run with the server already started:  node scripts/smoke-test.js http://localhost:3000
+// Run with the server already started:  node scripts/smoke-test.js http://localhost:3000 [previewKey]
 const { Wallet } = require('ethers');
 const { io } = require('socket.io-client');
 const BASE = process.argv[2] || 'http://localhost:3000';
+const PREVIEW = process.argv[3] ? { 'X-Preview-Key': process.argv[3] } : {}; // needed while coming-soon mode is on
 
 async function call(path, body, token) {
   const res = await fetch(BASE + path, {
     method: body ? 'POST' : 'GET',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    headers: { 'Content-Type': 'application/json', ...PREVIEW, ...(token ? { Authorization: 'Bearer ' + token } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json();
@@ -22,10 +23,13 @@ async function player(name) {
   const { token, profile } = await call('/api/login', { address: w.address, signature });
   await call('/api/nickname', { nickname: name }, token);
   const me = await call('/api/me', null, token);
+  // pick a legal Rookie deck (two commons + three rares, power under 220)
+  const pick = ['Ember Fox', 'Rock Tortoise', 'Lava Golem', 'Storm Eagle', 'Tide Crab'].map(n => me.cards.find(c => c.name === n).uid);
+  await call('/api/deck', { roomId: 1, uids: pick }, token);
   console.log(`${name}: balance ${profile.balance}, free packs ${profile.freePacks}, cards ${me.cards.length}`);
   const pack = await call('/api/pack', { packId: 'premium', useFree: true }, token);
   console.log(`${name}: free pack pulled ${pack.pulled.map(c => c.name + ' (' + c.rar + ')').join(', ')}; free packs left ${pack.profile.freePacks}`);
-  const socket = io(BASE, { auth: { token } });
+  const socket = io(BASE, { auth: { token, preview: process.argv[3] } });
   await new Promise((ok, bad) => { socket.on('connect', ok); socket.on('connect_error', bad); });
   return { name, token, socket };
 }

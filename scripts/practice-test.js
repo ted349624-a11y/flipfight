@@ -10,7 +10,8 @@ const call = async (p, b, t) => { const r = await fetch(BASE + p, { method: b ? 
   const { token } = await call('/api/login', { address: w.address, signature: await w.signMessage(message) });
   await call('/api/nickname', { nickname: 'Prac' + String(Date.now()).slice(-6) }, token);
   const me = await call('/api/me', null, token);
-  await call('/api/deck', { roomId: 0, uids: me.decks[1] }, token);
+  console.log('new player has no pre-built decks:', Object.keys(me.decks).length === 0);
+  await call('/api/deck', { roomId: 0, uids: me.cards.slice(0, 5).map(c => c.uid) }, token);
   const s = io(BASE, { auth: { token }, extraHeaders: COOKIE }); await new Promise((ok, bad) => { s.on('connect', ok); s.on('connect_error', bad); });
   const ask = (ev, d) => new Promise(r => s.emit(ev, d, r));
   const end = new Promise(resolve => {
