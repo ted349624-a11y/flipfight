@@ -882,44 +882,84 @@ function render(now) {
   });
   chars.push(me);
   renderWorld(now, { c, L: I.lctx, light: I.light, vw, vh, cx, cy, chars, flies: I.flies, glowAt: me, topClan: I.topClan });
-  // signs, names and bubbles stay readable on top of the darkness
+  // door hint arrows stay in the pixel world
   c.save(); c.translate(-cx, -cy);
-  c.font = '8px "Press Start 2P", monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
   BUILDINGS.forEach(b => {
-    const sx = b.door.x, sy = b.y * T - b.up;
-    if (sx < cx - 60 || sx > cx + vw + 60 || sy < cy - 30 || sy > cy + vh + 30) return;
-    drawSign(c, b);
-    if (Math.hypot(me.x - b.door.x, me.y - b.door.y) < 48 && (reduced || Math.floor(now / 350) % 2)) { // door hint arrow
+    if (Math.hypot(me.x - b.door.x, me.y - b.door.y) < 48 && (reduced || Math.floor(now / 350) % 2)) {
       px(c, b.sign, b.door.x - 3, b.door.y - 10, 7, 1); px(c, b.sign, b.door.x - 2, b.door.y - 9, 5, 1); px(c, b.sign, b.door.x - 1, b.door.y - 8, 3, 1); px(c, b.sign, b.door.x, b.door.y - 7, 1, 1);
     }
   });
-  if (I.boss && BOSS_SPOT.door) drawBossSign(c, I.boss);
-  for (const p of chars) {
-    const name = p.nick, nw = Math.round(c.measureText(name).width);
-    const nx = Math.round(p.x), ny = Math.round(p.y) - 26;
-    if (p.clan) {
-      const royal = !!p.clan.banner.special, fx = nx - Math.round(nw / 2) - (p.founder ? 26 : 18) - (royal ? 3 : 0);
-      c.drawImage(bannerSprite(p.clan.banner), fx, ny - (royal ? 14 : 12)); // clan flag next to the name
-      if (p.clan.banner.special && !reduced && Math.sin(now / 260 + p.x) > .6) px(c, '#fff3c4', fx + 4 + Math.round((now / 90) % 6), ny - 9 + Math.round((now / 130) % 7), 1, 1); // royal glint
+  if (I.path.length && !reduced) { const g = I.path[I.path.length - 1], r = 3 + (Math.floor(now / 140) % 3); c.strokeStyle = '#ffcc33'; c.lineWidth = 1; c.strokeRect(Math.round(g.x - r) + .5, Math.round(g.y - r / 2) + .5, r * 2, r); }
+  c.restore();
+  drawLabels(now, chars, cx, cy);
+}
+
+// Names, building signs, emote bubbles and the boss bar are drawn on a full-resolution overlay, so their size
+// follows the screen (small on phones) instead of the world zoom.
+function drawLabels(now, chars, cx, cy) {
+  const u = I.uctx, S = I.scale, D = I.dpr, f = I.fontPx, me = I.me;
+  u.setTransform(D, 0, 0, D, 0, 0); u.clearRect(0, 0, I.ui.width, I.ui.height); u.imageSmoothingEnabled = false;
+  const X = wx => (wx - cx) * S, Y = wy => (wy - cy) * S, cssW = I.ui.width / D, cssH = I.ui.height / D;
+  const font = sz => `${sz}px "Press Start 2P", monospace`;
+  const box = (x, y, w, h, fill, line) => { u.fillStyle = OUT; u.fillRect(Math.round(x - 1), Math.round(y - 1), Math.round(w + 2), Math.round(h + 2)); u.fillStyle = fill; u.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); if (line) { u.fillStyle = line; u.fillRect(Math.round(x), Math.round(y + h - Math.max(1, f / 8)), Math.round(w), Math.max(1, Math.round(f / 8))); } };
+  u.textAlign = 'center'; u.textBaseline = 'middle';
+  // building signs
+  const fs = Math.round(f * 1.15);
+  u.font = font(fs);
+  BUILDINGS.forEach(b => {
+    const sx = X(b.door.x), sy = Y(b.y * T - b.up + (b.board ? 10 : 2));
+    if (sx < -120 || sx > cssW + 120 || sy < -40 || sy > cssH + 40) return;
+    const w = u.measureText(b.label).width + fs, h = fs * 1.7;
+    box(sx - w / 2, sy - h / 2, w, h, '#2a2240', b.sign);
+    u.fillStyle = b.sign; u.fillText(b.label, sx, sy + 1);
+  });
+  // the boss: name and health bar
+  const st = I.boss;
+  if (st && BOSS_SPOT.door) {
+    const sx = X(BOSS_SPOT.x + 60), sy = Y(BOSS_SPOT.y - 8);
+    if (sx > -200 && sx < cssW + 200 && sy > -60 && sy < cssH + 60) {
+      const label = st.killedAt ? 'DEFEATED' : st.name.toUpperCase();
+      u.font = font(fs);
+      const w = Math.max(u.measureText(label).width + fs * 1.4, fs * 9), h = fs * 2.9;
+      box(sx - w / 2, sy - h / 2, w, h, '#2a1020');
+      u.fillStyle = st.killedAt ? '#9d96c6' : '#ff5d6c'; u.fillText(label, sx, sy - fs * .45);
+      const hpw = w - fs, fr = st.maxHp ? st.hp / st.maxHp : 0, by = sy + fs * .45;
+      u.fillStyle = '#0b0916'; u.fillRect(Math.round(sx - hpw / 2), Math.round(by), Math.round(hpw), Math.round(fs * .6));
+      u.fillStyle = fr > .5 ? '#5fd38d' : fr > .2 ? '#ffcc33' : '#ff5d6c'; u.fillRect(Math.round(sx - hpw / 2), Math.round(by), Math.round(hpw * fr), Math.round(fs * .6));
     }
-    if (p.founder) { // royal name plate with stars
-      const w = nw + 22;
-      px(c, OUT, nx - w / 2 - 1, ny - 11, w + 2, 15); px(c, '#7a1428', nx - w / 2, ny - 10, w, 13); px(c, '#ffcc33', nx - w / 2, ny + 2, w, 1); px(c, '#ffcc33', nx - w / 2, ny - 10, w, 1);
-      c.fillStyle = '#ffcc33'; c.fillText('★', nx - w / 2 + 6, ny); c.fillText('★', nx + w / 2 - 5, ny);
-      c.fillStyle = '#fff3c4'; c.fillText(name, nx, ny);
+  }
+  // players: clan flag, name plate, emote bubble
+  u.font = font(f);
+  for (const p of chars) {
+    const nx = X(p.x), ny = Y(p.y - 25);
+    if (nx < -150 || nx > cssW + 150 || ny < -60 || ny > cssH + 60) continue;
+    const nw = u.measureText(p.nick).width, h = f * 1.6;
+    let w = nw + f, left;
+    if (p.founder) {
+      w = nw + f * 3.2; left = nx - w / 2;
+      box(left, ny - h / 2, w, h, '#7a1428', '#ffcc33');
+      u.fillStyle = '#ffcc33'; u.fillRect(Math.round(left), Math.round(ny - h / 2), Math.round(w), Math.max(1, Math.round(f / 8)));
+      u.fillText('★', left + f * .8, ny + 1); u.fillText('★', left + w - f * .8, ny + 1);
+      u.fillStyle = '#fff3c4'; u.fillText(p.nick, nx, ny + 1);
     } else {
-      px(c, 'rgba(20,15,35,.75)', nx - nw / 2 - 3, ny - 9, nw + 6, 11);
-      c.fillStyle = p === me ? '#ffcc33' : '#f3ecd6'; c.fillText(name, nx, ny);
+      left = nx - w / 2;
+      u.fillStyle = 'rgba(20,15,35,.78)'; u.fillRect(Math.round(left), Math.round(ny - h / 2), Math.round(w), Math.round(h));
+      u.fillStyle = p === me ? '#ffcc33' : '#f3ecd6'; u.fillText(p.nick, nx, ny + 1);
+    }
+    if (p.clan) { // clan banner to the left of the plate
+      const img = bannerSprite(p.clan.banner), bh = h * 1.25, bw = bh * img.width / img.height;
+      const bx = left - bw - f * .3, byy = ny - bh / 2;
+      u.drawImage(img, Math.round(bx), Math.round(byy), Math.round(bw), Math.round(bh));
+      if (p.clan.banner.special && !reduced && Math.sin(now / 260 + p.x) > .6) { u.fillStyle = '#fff3c4'; const g = Math.max(1, Math.round(f / 6)); u.fillRect(Math.round(bx + bw * (.35 + ((now / 900) % .4))), Math.round(byy + bh * (.25 + ((now / 1300) % .4))), g, g); }
     }
     const em = p === me ? (now - (I.myEmoteAt || 0) < 3000 ? I.myEmote : '') : (p.emoteUntil > now ? p.emote : '');
     if (em) {
-      const txt = EMOTE_TEXT[em] || em, bw = Math.round(c.measureText(txt).width + 10), by = ny - 26;
-      px(c, OUT, nx - bw / 2 - 1, by - 1, bw + 2, 16); px(c, '#f4ecd8', nx - bw / 2, by, bw, 14); px(c, '#f4ecd8', nx - 1, by + 14, 3, 2); px(c, OUT, nx - 1, by + 16, 3, 1);
-      c.fillStyle = '#1a1306'; c.fillText(txt, nx, by + 11);
+      const txt = EMOTE_TEXT[em] || em, bw = u.measureText(txt).width + f * 1.2, bh = f * 1.8, by = ny - h / 2 - bh - f * .6;
+      box(nx - bw / 2, by, bw, bh, '#f4ecd8');
+      u.fillStyle = '#f4ecd8'; u.fillRect(Math.round(nx - f / 4), Math.round(by + bh), Math.round(f / 2), Math.round(f / 3));
+      u.fillStyle = '#1a1306'; u.fillText(txt, nx, by + bh / 2 + 1);
     }
   }
-  if (I.path.length && !reduced) { const g = I.path[I.path.length - 1], r = 3 + (Math.floor(now / 140) % 3); c.strokeStyle = '#ffcc33'; c.lineWidth = 1; c.strokeRect(Math.round(g.x - r) + .5, Math.round(g.y - r / 2) + .5, r * 2, r); }
-  c.restore();
 }
 
 // ---------- backdrop: the island behind every other screen ----------
@@ -1043,6 +1083,9 @@ function resize() {
   I.scale = I.zoom || Math.max(2, Math.min(4, Math.round(Math.min(cssW / (T * 30), cssH / (T * 20)))));
   I.vw = Math.ceil(cssW / I.scale); I.vh = Math.ceil(cssH / I.scale);
   I.canvas.width = I.vw; I.canvas.height = I.vh;
+  I.dpr = Math.min(3, window.devicePixelRatio || 1);
+  I.ui.width = Math.round(cssW * I.dpr); I.ui.height = Math.round(cssH * I.dpr);
+  I.fontPx = Math.max(8, Math.min(13, Math.round(cssW / 85))); // labels: 8px on phones, up to 13px on big screens
   I.light.width = I.vw; I.light.height = I.vh;
   I.ctx.imageSmoothingEnabled = false;
 }
@@ -1092,7 +1135,8 @@ window.Island = {
       I.canvas.addEventListener('pointerdown', onPointer);
       addEventListener('resize', resize);
     }
-    container.appendChild(I.canvas);
+    if (!I.ui) { I.ui = document.createElement('canvas'); I.ui.className = 'island-ui'; I.ui.setAttribute('aria-hidden', 'true'); I.uctx = I.ui.getContext('2d'); }
+    container.appendChild(I.canvas); container.appendChild(I.ui);
     let start = SPAWN;
     try { const s = JSON.parse(localStorage.getItem('ff-island-pos') || 'null'); if (s && walkable(s.x, s.y)) start = s; } catch (e) {}
     I.me = { id: me.id, nick: me.nickname, founder: !!me.founder, clan: me.clan || null, x: start.x, y: start.y, dir: 0, moving: false, anim: 0, look: lookOf(me.address, !!me.founder) };

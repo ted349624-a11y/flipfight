@@ -52,6 +52,21 @@
     </form>
   </section>
 
+  <section id="xquests" hidden>
+    <form class="frame login xq" id="xqForm">
+      <h2>Join the island crew</h2>
+      <p>One time only: link your X account and finish these quick tasks to unlock the game.</p>
+      <div class="field">
+        <label for="xqUser" class="note">Your X username</label>
+        <div class="xq-user"><span>@</span><input id="xqUser" maxlength="16" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="username"></div>
+      </div>
+      <ol class="xq-list" id="xqList"></ol>
+      <div class="xq-bar"><i id="xqBar"></i></div>
+      <button class="btn" type="submit" id="xqGo" disabled>Enter the island</button>
+      <p class="err" id="xqErr" role="alert"></p>
+    </form>
+  </section>
+
   <nav class="tabs" role="tablist" id="tabs" hidden>
     <button role="tab" data-tab="island" aria-selected="true" class="tab-island">‹ ISLAND</button>
     <button role="tab" data-tab="arena" aria-selected="false">ARENA</button>

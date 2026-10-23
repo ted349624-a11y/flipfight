@@ -82,12 +82,17 @@ node scripts/season-test.js http://localhost:3000 KEY play   # sezon maçları; 
 - Veriler Neon'da tutulduğu için sunucu uyusa veya yeniden başlasa da kaybolmaz. Sadece o an sürmekte olan maçlar yarıda kalır.
 - Oyun büyüdüğünde Render'ın ücretli planına geçmek uyku sorununu çözer, kodda değişiklik gerekmez.
 
-## "Coming soon" modu
+## Giriş: X görevleri (bir kerelik)
 
-Varsayılan olarak açık. Siteye gelenler tanıtım sayfasını görür; oyun, hesaplar ve veriler arkada çalışmaya devam eder.
+Oyun herkese açık. Yeni bir oyuncu cüzdanını bağlayıp nickname'ini seçtikten sonra **bir kez** X kullanıcı adını yazar ve 5 görevi yapar: takip et, bildirimleri aç 🔔, gönderiyi beğen, repost et, yanıt yaz. Hepsi bitince oyuna girer; bir daha sorulmaz. Kurucu hesabı bu adımı atlar.
 
-- **Önizleme:** Render'da `PREVIEW_KEY` değişkenine gizli bir değer gir. `https://flipfight.fun/?preview=GIZLI_DEGER` adresini bir kez açan tarayıcı 90 gün boyunca oyuna girebilir.
-- **Açılış:** Render'da `COMING_SOON` değişkenini `off` yap. Servis yeniden başlar ve oyun herkese açılır.
+- `X_HANDLE`: takip edilecek hesap (ör. `flipfightfun`, @ olmadan da olur).
+- `X_TWEET_URL`: beğenilecek / repost edilecek / yanıtlanacak gönderinin linki (ör. `https://x.com/flipfightfun/status/123…`).
+- `X_REPLY_TEXT` (isteğe bağlı): yanıt kutusuna hazır gelen metin.
+- İkisinden biri boşsa adım kapalıdır ve oyuncular doğrudan oyuna girer.
+- Görevler X'in kendi sayfalarında açılır; oyuncu sekmeye geri döndüğünde işaretlenir. X ücretsiz olarak bu eylemleri doğrulatmaz (ücretli X API gerekir), bu yüzden kontrol güvene dayalıdır. Sunucu yine de her görevin işaretlenmesini, geçerli bir kullanıcı adını ve her X hesabının yalnızca bir oyuncuya bağlanmasını zorunlu tutar.
+
+"Coming soon" sayfası artık varsayılan olarak kapalı. Gerekirse `COMING_SOON=on` ile geri açılır (`PREVIEW_KEY` ile önizleme yine çalışır).
 
 ## Cüzdanlar ve mobil oyuncular
 

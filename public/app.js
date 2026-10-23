@@ -175,7 +175,7 @@ function backEl() { const d = document.createElement('div'); d.className = 'back
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
 // ---------- screens ----------
-const SCREENS = ['login', 'nickname', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'clans', 'boss', 'history'];
+const SCREENS = ['login', 'nickname', 'xquests', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'clans', 'boss', 'history'];
 let current = null;
 function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
@@ -183,7 +183,7 @@ function show(id) {
   current = id; SCREENS.forEach(s => ($(s).hidden = s !== id));
   document.body.classList.toggle('on-island', id === 'island');
   watchFeed();
-  if (S.me && S.me.nickname && id !== 'login' && id !== 'nickname') $('tabs').hidden = id === 'island';
+  if (S.me && S.me.nickname && id !== 'login' && id !== 'nickname' && id !== 'xquests') $('tabs').hidden = id === 'island';
   if (id !== 'forge') $('fgBar').hidden = true;
   atmosphere(id);
   $('guide').hidden = !(id === 'login' || id === 'arena');
@@ -386,8 +386,88 @@ $('nickForm').onsubmit = async e => {
   e.preventDefault();
   try {
     const res = await api('/api/nickname', { nickname: $('nickInput').value.trim() });
-    S.me = res.profile; SFX.coin(); enterApp();
+    S.me = res.profile; SFX.coin(); afterNick();
   } catch (err) { $('nickErr').textContent = err.message; }
+};
+
+// ---------- X tasks (one time, before the first game) ----------
+const needX = () => !!(S.cfg && S.cfg.xQuests && S.me && !S.me.xDone);
+function afterNick() { if (needX()) renderXQuests(); else enterApp(); }
+const XQ_INFO = {
+  follow: ['Follow', h => `Follow @${h} on X`],
+  notify: ['Bell', h => `Turn on notifications 🔔 for @${h}`],
+  like: ['Like', () => 'Like our post'],
+  repost: ['Repost', () => 'Repost it'],
+  reply: ['Reply', () => 'Reply to the post'],
+};
+function xqUrl(t) {
+  const x = S.cfg.xQuests, H = encodeURIComponent(x.handle);
+  return {
+    follow: `https://x.com/intent/follow?screen_name=${H}`,
+    notify: `https://x.com/${H}`,
+    like: `https://x.com/intent/like?tweet_id=${x.tweetId}`,
+    repost: `https://x.com/intent/retweet?tweet_id=${x.tweetId}`,
+    reply: `https://x.com/intent/post?in_reply_to=${x.tweetId}&text=${encodeURIComponent(x.reply || '')}`,
+  }[t];
+}
+const XQ_KEY = () => 'ff-xq-' + (S.me ? S.me.id : '');
+function xqLoad() { try { return JSON.parse(localStorage.getItem(XQ_KEY()) || '{}'); } catch (e) { return {}; } }
+function xqSave(st) { try { localStorage.setItem(XQ_KEY(), JSON.stringify(st)); } catch (e) {} }
+let XQ = { done: {}, pending: null };
+function renderXQuests() {
+  $('walletBar').hidden = false; $('tabs').hidden = true; updateTop();
+  const saved = xqLoad();
+  XQ = { done: saved.done || {}, pending: null };
+  $('xqUser').value = saved.user || S.me.xUsername || '';
+  $('xqErr').textContent = '';
+  drawXQ(); show('xquests');
+}
+function drawXQ() {
+  const x = S.cfg.xQuests, list = $('xqList');
+  list.innerHTML = '';
+  x.tasks.forEach((t, i) => {
+    const li = document.createElement('li');
+    const state = XQ.done[t] ? 'done' : XQ.pending && XQ.pending.t === t ? 'wait' : '';
+    li.className = 'xq-task ' + state;
+    li.innerHTML = `<span class="xq-n">${XQ.done[t] ? '✓' : i + 1}</span><span class="xq-t"></span><a class="btn ghost small" target="_blank" rel="noopener"></a>`;
+    li.querySelector('.xq-t').textContent = XQ_INFO[t][1](x.handle);
+    const a = li.querySelector('a');
+    a.href = xqUrl(t);
+    a.textContent = XQ.done[t] ? 'Done' : state === 'wait' ? 'Checking…' : XQ_INFO[t][0];
+    a.onclick = () => {
+      if (XQ.done[t]) return;
+      SFX.click();
+      XQ.pending = { t, at: Date.now() };
+      drawXQ();
+      clearTimeout(XQ.timer); XQ.timer = setTimeout(xqCheck, 9000); // in case the page never loses focus (X opened in an app)
+    };
+    list.appendChild(li);
+  });
+  const n = x.tasks.filter(t => XQ.done[t]).length;
+  $('xqBar').style.width = (n / x.tasks.length * 100) + '%';
+  $('xqGo').disabled = n < x.tasks.length || !/^@?[A-Za-z0-9_]{1,15}$/.test($('xqUser').value.trim());
+}
+// a task counts once the player went to X and came back after a few seconds
+function xqCheck() {
+  const p = XQ.pending;
+  if (!p || current !== 'xquests') return;
+  if (Date.now() - p.at < 3500) { clearTimeout(XQ.timer); XQ.timer = setTimeout(xqCheck, 3500 - (Date.now() - p.at)); return; }
+  XQ.done[p.t] = true; XQ.pending = null; clearTimeout(XQ.timer);
+  xqSave({ done: XQ.done, user: $('xqUser').value.trim() });
+  SFX.coin(); drawXQ();
+}
+window.addEventListener('focus', () => setTimeout(xqCheck, 400));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(xqCheck, 400); });
+$('xqUser').oninput = () => { xqSave({ done: XQ.done, user: $('xqUser').value.trim() }); drawXQ(); };
+$('xqForm').onsubmit = async e => {
+  e.preventDefault();
+  $('xqErr').textContent = '';
+  try {
+    const res = await api('/api/x-quests', { username: $('xqUser').value.trim().replace(/^@/, ''), tasks: S.cfg.xQuests.tasks.filter(t => XQ.done[t]) });
+    S.me = res.profile; SFX.coin();
+    try { localStorage.removeItem(XQ_KEY()); } catch (err) {}
+    enterApp();
+  } catch (err) { $('xqErr').textContent = err.message; }
 };
 
 // ---------- boot ----------
@@ -401,7 +481,7 @@ async function boot() {
   if (!S.token) return;
   S.me = me.profile; S.cards = me.cards; S.decks = me.decks; S.badges = me.badges; S.seasonResult = me.seasonResult;
   if (!S.me.nickname) return renderNickname();
-  enterApp();
+  afterNick();
 }
 async function refreshMe() {
   const me = await api('/api/me');
@@ -442,6 +522,7 @@ function connectSocket() {
   s.on('connect_error', err => {
     if (err.message === 'unauthorized') signOut(true);
     else if (err.message === 'nickname_required') renderNickname();
+    else if (err.message === 'x_quests') { if (S.me) S.me.xDone = false; renderXQuests(); }
   });
   s.on('lobby', l => { S.lobby = l; if (current === 'arena') renderRooms(); if (current === 'queue') renderQueueNote(); });
   s.on('match:state', onMatchState);

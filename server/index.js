@@ -25,7 +25,21 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => 
 // On by default. Set COMING_SOON=off on the host to open the game to everyone.
 // Anyone who opens /?preview=<PREVIEW_KEY> gets in. The key is kept in a cookie and also in the
 // page's local storage (sent as a header), so it still works in wallet browsers that drop cookies.
-const COMING_SOON = !/^(off|false|0|no)$/i.test(process.env.COMING_SOON || 'on');
+const COMING_SOON = /^(on|true|1|yes)$/i.test(process.env.COMING_SOON || 'off'); // off unless COMING_SOON=on
+
+// One-time X (Twitter) onboarding: before playing, every account gives its X username and completes a few tasks
+// (follow, like, repost, reply, turn on notifications) on X_HANDLE's account and the X_TWEET_URL post.
+// X doesn't let a free site check these, so each task opens X and is ticked off when the player comes back.
+// Leave X_HANDLE or X_TWEET_URL empty to switch the onboarding off.
+const X_HANDLE = (process.env.X_HANDLE || '').trim().replace(/^@/, '');
+const X_TWEET_ID = ((process.env.X_TWEET_URL || '').match(/status(?:es)?\/(\d+)/) || [])[1] || (/^\d+$/.test((process.env.X_TWEET_URL || '').trim()) ? process.env.X_TWEET_URL.trim() : '');
+const X_QUESTS = /^[A-Za-z0-9_]{1,15}$/.test(X_HANDLE) && X_TWEET_ID ? {
+  handle: X_HANDLE, tweetId: X_TWEET_ID,
+  reply: (process.env.X_REPLY_TEXT || 'Flipping cards on the island! ⚔️ flipfight.fun').slice(0, 200),
+  tasks: ['follow', 'notify', 'like', 'repost', 'reply'],
+} : null;
+const needsX = u => !!X_QUESTS && !!u && !u.x_done_at && !isFounder(u);
+const X_FREE = new Set(['/api/me', '/api/x-quests', '/api/logout', '/api/nickname']);
 const PREVIEW_KEY = (process.env.PREVIEW_KEY || '').trim();
 const PREVIEW_COOKIE = 'ff_preview';
 function readCookie(header, name) {
@@ -138,7 +152,7 @@ async function createUser(address) {
 
 function publicProfile(u) {
   return {
-    id: u.id, address: u.address, nickname: u.nickname, founder: isFounder(u), clan: clans.clanOf(u.clan_id), balance: u.balance, elo: u.elo, tier: G.tierOf(u.elo).id,
+    id: u.id, address: u.address, nickname: u.nickname, founder: isFounder(u), xUsername: u.x_username || null, xDone: !needsX(u), clan: clans.clanOf(u.clan_id), balance: u.balance, elo: u.elo, tier: G.tierOf(u.elo).id,
     wins: u.wins, losses: u.losses, draws: u.draws, freePacks: u.free_packs,
     season: { played: u.season_played || 0, wins: u.season_wins || 0, losses: u.season_losses || 0, draws: u.season_draws || 0 },
     bonusReadyIn: Math.max(0, u.last_bonus + G.ECONOMY.dailyBonusMs - now()),
@@ -199,6 +213,7 @@ const auth = route(async (req, res, next) => {
   const user = await sessionUser(token);
   if (!user) return fail(res, 401, 'Please sign in again.');
   req.user = user; req.token = token;
+  if (needsX(user) && !X_FREE.has(req.path)) return res.status(403).json({ error: 'Finish the X tasks to play.', code: 'x_quests' });
   next();
 });
 
@@ -260,7 +275,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
   res.json({ season: G.SEASON, tiers: G.TIERS, rewards: Array.from({ length: G.SEASON.paidPlaces }, (_, i) => G.seasonReward(i + 1)), market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit },
-    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM, clan: G.CLAN, bossRoom: G.BOSS_ROOM, bosses: G.BOSS.bosses.map(b => ({ id: b.id, name: b.name, el: b.el })) });
+    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, xQuests: X_QUESTS, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM, clan: G.CLAN, bossRoom: G.BOSS_ROOM, bosses: G.BOSS.bosses.map(b => ({ id: b.id, name: b.name, el: b.el })) });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {
@@ -284,6 +299,21 @@ app.post('/api/nickname', auth, route(async (req, res) => {
     throw e;
   }
   if (isFounder(req.user)) await clans.ensureOfficial(req.user.id).catch(e => console.error('official clan', e));
+  res.json({ profile: publicProfile(await q.userById(req.user.id)) });
+}));
+
+app.post('/api/x-quests', auth, route(async (req, res) => {
+  if (!X_QUESTS) return res.json({ profile: publicProfile(req.user) });
+  const name = String(req.body.username || '').trim().replace(/^@/, '');
+  if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return fail(res, 400, 'Enter your X username (letters, numbers and _ only).');
+  const done = Array.isArray(req.body.tasks) ? req.body.tasks : [];
+  if (!X_QUESTS.tasks.every(t => done.includes(t))) return fail(res, 400, 'Complete every task first.');
+  try {
+    await db.query('UPDATE users SET x_username = $1, x_done_at = $2 WHERE id = $3', [name, now(), req.user.id]);
+  } catch (e) {
+    if (e.code === '23505') return fail(res, 409, 'That X account is already linked to another player.');
+    throw e;
+  }
   res.json({ profile: publicProfile(await q.userById(req.user.id)) });
 }));
 
@@ -542,6 +572,7 @@ io.use((socket, next) => {
   sessionUser(socket.handshake.auth && socket.handshake.auth.token).then(user => {
     if (!user) return next(new Error('unauthorized'));
     if (!user.nickname) return next(new Error('nickname_required'));
+    if (needsX(user)) return next(new Error('x_quests'));
     socket.data.userId = user.id;
     next();
   }).catch(() => next(new Error('unavailable')));
