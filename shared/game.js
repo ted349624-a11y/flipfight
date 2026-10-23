@@ -33,6 +33,14 @@ const ROOMS = [
   { id: 3, name: 'ROOM 3 · LEGEND', stake: 500000, limit: null, rake: 0.04 }, // null = no cap
 ];
 
+// Practice room: free games against a bot. No stake, no deck cap, no ELO, no history.
+const PRACTICE = { id: 0, name: 'PRACTICE · VS BOT', stake: 0, limit: null, rake: 0 };
+const BOT_LEVELS = {
+  easy: { name: 'Easy', elo: 1000 },
+  normal: { name: 'Normal', elo: 1200 },
+  hard: { name: 'Hard', elo: 1450 },
+};
+
 const PACKS = [
   { id: 'basic', name: 'BASIC PACK', price: 15000, n: 3, odds: { common: 70, rare: 22, epic: 7, legendary: 1 } },
   { id: 'premium', name: 'PREMIUM PACK', price: 60000, n: 3, odds: { common: 0, rare: 65, epic: 28, legendary: 7 } },
@@ -61,4 +69,4 @@ function effectivePower(card, exhausted, vsElement) {
   return Math.round(card.pow * elementBonus * (exhausted ? 0.5 : 1));
 }
 
-module.exports = { CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

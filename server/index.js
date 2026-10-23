@@ -113,7 +113,7 @@ async function decksOf(userId) {
 
 // Validates a deck for a room; returns { room, cards } or throws a player-facing message.
 async function validateDeck(userId, roomId, uids) {
-  const room = G.ROOMS.find(r => r.id === roomId);
+  const room = roomId === G.PRACTICE.id ? G.PRACTICE : G.ROOMS.find(r => r.id === roomId);
   if (!room) throw new Error('Unknown room.');
   if (!Array.isArray(uids) || uids.length !== G.MATCH.deckSize) throw new Error(`Pick exactly ${G.MATCH.deckSize} cards.`);
   if (new Set(uids).size !== uids.length) throw new Error('Each card can be used once per deck.');
@@ -186,7 +186,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
-  res.json({ elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
+  res.json({ practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {

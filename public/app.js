@@ -17,9 +17,9 @@ const S = {
   token: null, cfg: null, me: null, cards: [], decks: {}, socket: null,
   lobby: { waiting: {}, online: 0 }, room: null, sel: [], tab: 'arena', filter: 'all',
   match: null, matchSel: null, seenLog: 0, newUids: [], lastRoomId: null,
-  sfx: true,
+  sfx: true, botLevel: 'normal',
 };
-try { S.token = localStorage.getItem('ff-token'); S.sfx = localStorage.getItem('ff-sfx') !== '0'; } catch (e) {}
+try { S.token = localStorage.getItem('ff-token'); S.sfx = localStorage.getItem('ff-sfx') !== '0'; S.botLevel = localStorage.getItem('ff-bot') || 'normal'; } catch (e) {}
 const saveToken = t => { S.token = t; try { t ? localStorage.setItem('ff-token', t) : localStorage.removeItem('ff-token'); } catch (e) {} };
 
 // ---------- api ----------
@@ -270,8 +270,26 @@ function emit(ev, data) {
 }
 
 // ---------- arena ----------
+const roomById = id => (id === 0 ? S.cfg.practice : S.cfg.rooms.find(x => x.id === id));
+function practiceCard() {
+  const d = document.createElement('div'); d.className = 'frame practice';
+  const levels = Object.entries(S.cfg.botLevels);
+  d.innerHTML = `<div class="p-info"><span class="tier">PRACTICE · VS BOT</span>
+      <span class="p-title">Learn the game for free</span>
+      <span class="cap">No entry fee · no ELO change · always available</span></div>
+    <div class="p-actions"><div class="p-levels" role="radiogroup" aria-label="Bot difficulty">${levels.map(([k, v]) =>
+      `<button type="button" role="radio" data-level="${k}" aria-checked="${S.botLevel === k}">${v.name.toUpperCase()}</button>`).join('')}</div>
+    <button class="btn" type="button" id="practiceGo">Practice ›</button></div>`;
+  d.querySelectorAll('[data-level]').forEach(b => b.onclick = () => {
+    S.botLevel = b.dataset.level; try { localStorage.setItem('ff-bot', S.botLevel); } catch (e) {}
+    SFX.click(); renderRooms();
+  });
+  d.querySelector('#practiceGo').onclick = () => { SFX.click(); openDeck(S.cfg.practice); };
+  return d;
+}
 function renderRooms() {
   const box = $('rooms'); box.innerHTML = '';
+  box.appendChild(practiceCard());
   S.cfg.rooms.forEach(rm => {
     const ok = S.me.balance >= rm.stake;
     const b = document.createElement('button'); b.className = 'room' + (ok ? '' : ' locked'); b.type = 'button';
@@ -304,9 +322,10 @@ const byUid = uid => S.cards.find(c => c.uid === uid);
 const sortedCards = () => S.cards.slice().sort((a, b) => rar(b.rar).rank - rar(a.rar).rank || b.pow - a.pow);
 function openDeck(rm) {
   S.room = rm;
-  S.sel = (S.decks[rm.id] || []).filter(byUid).slice(0, 5);
+  // practice falls back to the Rookie deck so new players can start with one tap
+  S.sel = (S.decks[rm.id] || (rm.id === 0 ? S.decks[1] : null) || []).filter(byUid).slice(0, 5);
   $('deckTitle').textContent = rm.name;
-  $('deckSub').textContent = `Entry ${fmt(rm.stake)} FLIP · pick 5 cards`;
+  $('deckSub').textContent = rm.id === 0 ? `Free practice vs ${S.cfg.botLevels[S.botLevel].name} bot · pick 5 cards` : `Entry ${fmt(rm.stake)} FLIP · pick 5 cards`;
   renderDeck(); show('deck');
 }
 function renderDeck() {
@@ -331,7 +350,7 @@ function renderDeck() {
   $('deckHint').textContent = en > 15 ? `Energy cost is ${en - 15} over 15, so at least one card will play exhausted (half power).` : 'Energy fits: every card can play at full power.';
   const enough = S.me.balance >= rm.stake, ready = S.sel.length === 5 && !over && enough;
   $('enter').disabled = !ready;
-  $('enter').textContent = `Find opponent · lock ${fmt(rm.stake)} FLIP`;
+  $('enter').textContent = rm.id === 0 ? `Start practice · ${S.cfg.botLevels[S.botLevel].name} bot` : `Find opponent · lock ${fmt(rm.stake)} FLIP`;
   $('enterNote').textContent = !enough ? 'Not enough FLIP.' : over ? 'Deck power is over the room cap.' : S.sel.length < 5 ? `Pick ${5 - S.sel.length} more.` : '';
   $('enterNote').className = 'note' + ((over || !enough) ? ' warn' : '');
 }
@@ -343,6 +362,7 @@ $('enter').onclick = async () => {
     S.decks[S.room.id] = S.sel.slice();
     S.lastRoomId = S.room.id;
     SFX.lock();
+    if (S.room.id === 0) { await emit('practice:start', { level: S.botLevel }); return; }
     const res = await emit('queue:join', { roomId: S.room.id });
     S.me = res.profile; updateTop();
     if (!S.match) startQueueScreen();
@@ -419,7 +439,8 @@ function renderMatch() {
   $('mySide').innerHTML = `<b>${esc(m.you.nickname)}</b><span class="meta num">ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>`;
   $('score').textContent = `${m.opp.wins} : ${m.you.wins}`;
   $('rnd').textContent = `ROUND ${m.round}/5`;
-  $('pot').textContent = `Pot ${fmt(m.room.stake * 2)} FLIP`;
+  $('pot').textContent = m.room.practice ? 'PRACTICE · NO STAKES' : `Pot ${fmt(m.room.stake * 2)} FLIP`;
+  $('quitPractice').hidden = !m.room.practice;
 
   // slots + verdict
   const last = m.log[m.log.length - 1];
@@ -482,7 +503,11 @@ function onMatchEnd(r) {
   clearInterval(timerT); S.match = null; lockTabs(false);
   S.me = r.profile; updateTop();
   const rows = [`<dt>Your entry</dt><dd class="num">−${fmt(r.stake)}</dd>`];
-  if (r.out === 'win') {
+  if (r.practice) {
+    rows.length = 0;
+    rows.push(`<dt>Mode</dt><dd>Practice vs ${esc(S.cfg.botLevels[r.level].name)} bot</dd>`, `<dt class="tot">FLIP and ELO</dt><dd class="tot">Unchanged</dd>`);
+    r.out === 'win' ? SFX.win() : r.out === 'loss' ? SFX.lose() : null;
+  } else if (r.out === 'win') {
     rows.push(`<dt>Pot</dt><dd class="num">${fmt(r.pot)}</dd>`, `<dt>House fee</dt><dd class="num">−${fmt(r.rake)}</dd>`,
       `<dt class="tot">Net profit</dt><dd class="tot num">+${fmt(r.net)} FLIP</dd>`);
     SFX.win();
@@ -495,14 +520,19 @@ function onMatchEnd(r) {
   if (r.rake) rows.push(`<dt>Fee split</dt><dd class="num">${fmt(r.split.burn)} burned · ${fmt(r.split.treasury)} treasury · ${fmt(r.split.season)} season</dd>`);
   $('resTitle').textContent = r.out === 'win' ? 'VICTORY' : r.out === 'loss' ? 'DEFEAT' : 'DRAW';
   $('resTitle').style.color = r.out === 'win' ? 'var(--gold)' : r.out === 'loss' ? 'var(--bad)' : 'var(--fg)';
-  $('resSub').textContent = `${r.myWins}–${r.oppWins} vs ${r.opponent} · ELO ${r.profile.elo} (${r.eloDelta >= 0 ? '+' : ''}${r.eloDelta})`;
+  $('resSub').textContent = r.practice ? `${r.myWins}–${r.oppWins} vs ${r.opponent}` : `${r.myWins}–${r.oppWins} vs ${r.opponent} · ELO ${r.profile.elo} (${r.eloDelta >= 0 ? '+' : ''}${r.eloDelta})`;
+  $('again').textContent = r.practice ? 'Practice again' : 'Play again';
   $('ledger').innerHTML = rows.join('');
   drawSprite($('resArt'), r.out === 'win' ? 11 * 31 + 5 : 10 * 31 + 5, r.out === 'win' ? 'fire' : 'water', r.out === 'win' ? 'legendary' : 'epic');
-  const rm = S.cfg.rooms.find(x => x.id === S.lastRoomId);
+  const rm = roomById(S.lastRoomId);
   $('again').disabled = !rm || S.me.balance < rm.stake;
   show('result');
 }
-$('again').onclick = () => { const rm = S.cfg.rooms.find(x => x.id === S.lastRoomId); SFX.click(); if (rm) openDeck(rm); };
+$('again').onclick = () => { const rm = roomById(S.lastRoomId); SFX.click(); if (rm) openDeck(rm); };
+$('quitPractice').onclick = async () => {
+  try { await emit('match:quit', {}); } catch (e) { toast(e.message); return; }
+  clearInterval(timerT); S.match = null; lockTabs(false); toast('Practice ended.'); setTab('arena');
+};
 $('toLobby').onclick = () => { SFX.click(); setTab('arena'); };
 
 // ---------- collection ----------

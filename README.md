@@ -12,6 +12,7 @@ Pixel art NFT kart düellosu. Oyuncular MetaMask ile giriş yapar, takma ad seç
 - **Ekonomi:** Giriş tutarı maç başında kilitlenir, kazanan havuzu alır. %5 komisyonun %40'ı yakılır, %40'ı hazineye, %20'si sezon havuzuna gider. Paket fiyatının yarısı yakılır.
 - **Lider tablosu ve geçmiş:** ELO (K=32) sıralaması, galibiyet/mağlubiyet/beraberlik, çevrim içi oyuncu sayısı, son 20 maç.
 - **Günlük bonus:** 24 saatte bir 25.000 FLIP.
+- **Bota karşı antrenman:** Ücretsiz, her zaman açık; FLIP, ELO ve maç geçmişini etkilemez. Easy, Normal ve Hard seviyeleri var; bot senin destenin aynısıyla oynar (ayna maç), sonucu sadece hamleler belirler.
 
 ## Yerelde çalıştırma
 
@@ -28,8 +29,12 @@ Tarayıcıda `http://localhost:3000` adresini aç. Tablolar ilk açılışta oto
 Otomatik test (sunucu açıkken, iki sahte cüzdanla tam bir maç oynar):
 
 ```bash
-node scripts/smoke-test.js http://localhost:3000
+node scripts/smoke-test.js http://localhost:3000      # iki oyunculu tam maç
+node scripts/practice-test.js http://localhost:3000   # bota karşı antrenman
+node scripts/bot-sim.js                               # bot seviyelerinin kazanma oranları (sunucu gerekmez)
 ```
+
+"Coming soon" açıkken test betiklerine önizleme anahtarını ikinci argüman olarak ver.
 
 ## Yayına alma: Render (sunucu) + Neon (veritabanı)
 

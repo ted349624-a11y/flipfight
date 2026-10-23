@@ -329,3 +329,15 @@ body{background:transparent}
 .g-table td,.g-table th{padding:6px 6px}
 .g-table{font-size:18px}
 @media (max-width:420px){.g-rooms th:nth-child(3),.g-rooms td:nth-child(3){display:none}}
+
+/* ---------- practice vs bot ---------- */
+.practice{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 18px;--b:var(--wind)}
+.practice .p-info{display:flex;flex-direction:column;gap:6px;min-width:0}
+.practice .tier{font-family:var(--font-px);font-size:9px;color:var(--wind)}
+.practice .p-title{font-family:var(--font-px);font-size:13px;line-height:1.5;color:var(--fg)}
+.practice .cap{font-size:18px;color:var(--muted)}
+.practice .p-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.p-levels{display:flex;gap:6px}
+.p-levels button{all:unset;cursor:pointer;font-family:var(--font-px);font-size:8px;padding:9px 10px;color:var(--muted);box-shadow:0 0 0 3px var(--line)}
+.p-levels button[aria-checked="true"]{color:#0b1a22;background:var(--wind);box-shadow:0 0 0 3px #3e8fb0}
+.p-levels button:focus-visible{outline:3px dashed var(--gold);outline-offset:4px}

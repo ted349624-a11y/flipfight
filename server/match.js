@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { createBot } = require('./bot');
 
 // Matchmaking queues and the server-authoritative match engine.
 // Live match state is kept in memory; balances, ELO and results are written to the database.
@@ -13,6 +14,8 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
   const emitTo = (userId, ev, data) => { const s = sockets.get(userId); if (s) s.emit(ev, data); };
   const cost = c => G.RARITIES[c.rar].cost;
   const log = err => console.error(err);
+  const bot = createBot(G);
+  const BOT_ID = -1;
 
   function broadcastLobby() {
     const waiting = {};
@@ -49,6 +52,49 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
     broadcastLobby();
     await q.addBalance(userId, G.ROOMS.find(r => r.id === roomId).stake); // refund the escrowed entry
     return true;
+  }
+
+  // ---------- practice vs bot ----------
+  async function startPractice(userId, level) {
+    if (!G.BOT_LEVELS[level]) throw new Error('Unknown difficulty.');
+    if (busy.has(userId)) throw new Error('Please wait a moment.');
+    if (userMatch.has(userId)) throw new Error('You are already in a match.');
+    if (userQueue.has(userId)) throw new Error('Cancel your search before starting practice.');
+    busy.add(userId);
+    try {
+      const deckRow = await q.deckOf(userId, G.PRACTICE.id);
+      if (!deckRow) throw new Error('Build a practice deck first.');
+      const { cards } = await validateDeck(userId, G.PRACTICE.id, JSON.parse(deckRow.card_uids));
+      const u = await q.userById(userId);
+      const human = { userId: u.id, nickname: u.nickname, elo: u.elo, hand: cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
+      const botP = { userId: BOT_ID, isBot: true, nickname: `Training Bot · ${G.BOT_LEVELS[level].name}`, elo: G.BOT_LEVELS[level].elo,
+        hand: bot.buildDeck(cards), used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
+      const m = { id: crypto.randomUUID(), room: G.PRACTICE, practice: true, level, players: [human, botP], round: 1, phase: 'pick', deadline: 0, timer: null, botTimer: null, log: [] };
+      matches.set(m.id, m);
+      userMatch.set(userId, m.id);
+      broadcastLobby();
+      startRound(m);
+      return m.id;
+    } finally { busy.delete(userId); }
+  }
+
+  function botPick(m) {
+    const b = m.players.find(p => p.isBot);
+    if (!b || m.phase !== 'pick' || b.pick !== null) return;
+    const human = m.players.find(p => !p.isBot);
+    b.pick = bot.choose(m.level, b, human).uid;
+    if (m.players.every(x => x.pick !== null)) resolveRound(m);
+    else emitState(m);
+  }
+
+  function quitPractice(userId) {
+    const m = matches.get(userMatch.get(userId));
+    if (!m) throw new Error('You are not in a match.');
+    if (!m.practice) throw new Error('Only practice matches can be left early.');
+    clearTimeout(m.timer); clearTimeout(m.botTimer);
+    m.phase = 'done';
+    matches.delete(m.id); userMatch.delete(userId);
+    broadcastLobby();
   }
 
   function tryPair(roomId) {
@@ -89,13 +135,14 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
     clearTimeout(m.timer);
     m.timer = setTimeout(() => timeoutRound(m), G.MATCH.turnMs + 500);
     emitState(m);
+    if (m.practice) { clearTimeout(m.botTimer); m.botTimer = setTimeout(() => botPick(m), bot.thinkMs(m.level)); }
   }
 
   function viewFor(m, idx) {
     const me = m.players[idx], op = m.players[1 - idx];
     return {
       matchId: m.id,
-      room: { id: m.room.id, name: m.room.name, stake: m.room.stake },
+      room: { id: m.room.id, name: m.room.name, stake: m.room.stake, practice: !!m.practice, level: m.level || null },
       round: m.round, phase: m.phase, deadline: m.deadline, serverNow: Date.now(),
       you: { nickname: me.nickname, elo: me.elo, hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick },
       opp: {
@@ -137,7 +184,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
   }
 
   function resolveRound(m) {
-    clearTimeout(m.timer);
+    clearTimeout(m.timer); clearTimeout(m.botTimer);
     m.phase = 'reveal';
     const cards = m.players.map(p => p.hand.find(c => c.uid === p.pick));
     const exhausted = m.players.map((p, i) => cost(cards[i]) > p.energy);
@@ -152,7 +199,8 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
     emitState(m);
     const over = m.players.some(p => p.wins >= G.MATCH.winsNeeded) || m.log.length >= G.MATCH.rounds;
     m.timer = setTimeout(() => {
-      if (over) finishMatch(m).catch(log);
+      if (!matches.has(m.id)) return; // practice match was left early
+      if (over) (m.practice ? finishPractice(m) : finishMatch(m).catch(log));
       else { m.round++; startRound(m); }
     }, G.MATCH.revealMs);
   }
@@ -160,6 +208,20 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
   function eloDelta(mine, theirs, score) {
     const expected = 1 / (1 + Math.pow(10, (theirs - mine) / 400));
     return Math.round(32 * (score - expected));
+  }
+
+  async function finishPractice(m) {
+    m.phase = 'done';
+    const [p, b] = m.players;
+    const out = p.wins > b.wins ? 'win' : p.wins < b.wins ? 'loss' : 'draw';
+    userMatch.delete(p.userId);
+    matches.delete(m.id);
+    emitTo(p.userId, 'match:end', {
+      matchId: m.id, practice: true, level: m.level, out, myWins: p.wins, oppWins: b.wins, opponent: b.nickname, room: m.room.name,
+      stake: 0, pot: 0, rake: 0, net: 0, split: { burn: 0, treasury: 0, season: 0 }, eloDelta: 0,
+      profile: publicProfile(await q.userById(p.userId)),
+    });
+    broadcastLobby();
   }
 
   async function finishMatch(m) {
@@ -224,6 +286,8 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
       await leaveQueue(userId);
       return { profile: publicProfile(await q.userById(userId)) };
     }));
+    socket.on('practice:start', (data, fn) => handle(fn, async () => ({ matchId: await startPractice(userId, String(data && data.level)) })));
+    socket.on('match:quit', (data, fn) => handle(fn, () => { quitPractice(userId); return {}; }));
     socket.on('match:pick', (data, fn) => handle(fn, () => { pick(userId, String(data && data.matchId), Number(data && data.uid)); return {}; }));
 
     socket.on('disconnect', () => {
