@@ -56,17 +56,9 @@ let toastT;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3500); }
 
 // ---------- sound ----------
-let AC = null;
 function beep(f, d = .08, type = 'square', v = .05, slide = 0, delay = 0) {
   if (!S.sfx) return;
-  try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
-    o.type = type; o.frequency.setValueAtTime(f, t);
-    if (slide) o.frequency.linearRampToValueAtTime(Math.max(40, f + slide), t + d);
-    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
-    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + .02);
-  } catch (e) {}
+  FX.beep(f, d, type, v, slide, delay);
 }
 const SFX = {
   click: () => beep(660, .04), lock: () => beep(330, .12, 'square', .05, -140), flip: () => beep(880, .06, 'triangle', .07),
@@ -98,6 +90,7 @@ function drawSprite(cv, seed, el, rarity) {
     ctx.fillStyle = v === 2 ? '#0b0916' : (y >= 8 ? shade : (y <= 4 && r() < .35 ? hi : main));
     ctx.fillRect(x, y, 1, 1);
   }
+  cv.dataset.ey = ey; cv.dataset.main = main;
   ctx.fillStyle = '#ffffff'; ctx.fillRect(4, ey, 1, 1); ctx.fillRect(7, ey, 1, 1);
   ctx.fillStyle = '#0b0916'; ctx.fillRect(4, ey + 1, 1, 1); ctx.fillRect(7, ey + 1, 1, 1);
   if (rarity === 'legendary') { ctx.fillStyle = '#ffcc33'; [[4, 0], [6, 0], [5, 1], [4, 1], [6, 1], [7, 0]].forEach(([x, y]) => ctx.fillRect(x, y, 1, 1)); }
@@ -157,7 +150,17 @@ function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
   current = id; SCREENS.forEach(s => ($(s).hidden = s !== id));
   if (id !== 'forge') $('fgBar').hidden = true;
+  atmosphere(id);
   $('guide').hidden = !(id === 'login' || id === 'arena');
+}
+// World scene, music and ambience for each screen
+const roomScene = id => (id === 2 ? 'volcano' : id === 3 ? 'temple' : 'meadow');
+function atmosphere(id) {
+  const roomId = id === 'match' && S.match ? S.match.room.id : S.room ? S.room.id : null;
+  if (['deck', 'queue', 'match'].includes(id) && roomId != null) FX.scene(roomScene(roomId));
+  else if (id !== 'result') FX.scene('night');
+  if (id !== 'match') FX.music('lobby');
+  FX.ambient(id === 'forge' ? 'forge' : id === 'market' ? 'market' : null);
 }
 // The guide opens by itself for players who haven't finished a match yet.
 let guideAutoOpened = false;
@@ -185,7 +188,9 @@ function updateTop() {
   if (S.cfg) $('tierTop').innerHTML = `${tierBadge(p.elo)}`;
   $('nick').textContent = p.nickname || ''; $('addr').textContent = shortAddr(p.address);
   $('sfx').setAttribute('aria-pressed', S.sfx); $('sfx').textContent = S.sfx ? 'SFX ON' : 'SFX OFF';
+  $('musicBtn').setAttribute('aria-pressed', FX.musicOn()); $('musicBtn').textContent = FX.musicOn() ? 'MUSIC ON' : 'MUSIC OFF';
 }
+$('musicBtn').onclick = () => { FX.setMusic(!FX.musicOn()); updateTop(); SFX.click(); };
 $('sfx').onclick = () => { S.sfx = !S.sfx; try { localStorage.setItem('ff-sfx', S.sfx ? '1' : '0'); } catch (e) {} updateTop(); SFX.click(); };
 
 // ---------- wallet sign-in ----------
@@ -470,6 +475,7 @@ function onMatchState(st) {
   if (first) {
     clearInterval(radarT); lockTabs(true); SFX.found();
     S.matchSel = null; S.seenLog = st.log.length;
+    lastRevealRound = st.phase === 'reveal' && st.log.length ? st.log[st.log.length - 1].round : 0; lastBannerRound = 0; FX.clearBattle();
     $('log').innerHTML = '';
     st.log.forEach(addLogLine);
   }
@@ -492,7 +498,13 @@ function drawTimer() {
   if ($('timer').textContent !== txt && left <= 5 && left > 0 && m.you.pick === null) SFX.tick();
   $('timer').textContent = txt; $('timer').className = 'timer num' + (left <= 5 ? ' low' : '');
 }
-let lastRevealRound = 0;
+let lastRevealRound = 0, lastBannerRound = 0;
+// keep the battlefield on screen for the reveal (on phones the hand sits below it)
+function showBoard() {
+  const b = document.querySelector('#match .board'); if (!b) return;
+  const r = b.getBoundingClientRect();
+  if (r.top < 0 || r.bottom > innerHeight) b.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+}
 function renderMatch() {
   const m = S.match;
   const oppLeft = m.opp.leftElements;
@@ -519,8 +531,27 @@ function renderMatch() {
     const note = (c, ex, vs) => [S.cfg.elements[c.el].beats === vs ? 'element +30%' : '', ex ? 'exhausted ×0.5' : ''].filter(Boolean).join(', ');
     const nt = note(last.theirs, last.theirExhausted, last.mine.el), nm = note(last.mine, last.myExhausted, last.theirs.el);
     $('calc').textContent = `${last.theirPower}${nt ? ' (' + nt + ')' : ''} – ${last.myPower}${nm ? ' (' + nm + ')' : ''}${last.myAuto ? ' · auto-played' : ''}`;
-    if (fresh) { lastRevealRound = last.round; SFX.flip(); setTimeout(() => last.result !== 'tie' && SFX.round(last.result === 'win'), 180); }
+    if (fresh) {
+      lastRevealRound = last.round; SFX.flip(); showBoard();
+      const els = S.cfg.elements;
+      FX.battle(document.querySelector('#match .board'), {
+        myCard: mc, oppCard: oc, mine: last.mine, theirs: last.theirs, result: last.result,
+        myPower: last.myPower, theirPower: last.theirPower,
+        myBonus: els[last.mine.el].beats === last.theirs.el, theirBonus: els[last.theirs.el].beats === last.mine.el,
+        myExhausted: last.myExhausted, theirExhausted: last.theirExhausted,
+      });
+      setTimeout(() => last.result !== 'tie' && SFX.round(last.result === 'win'), 1150);
+    }
   } else {
+    if (m.phase === 'pick' && m.round !== lastBannerRound) {
+      lastBannerRound = m.round;
+      const final = m.round === 5 || (m.you.wins === 2 && m.opp.wins === 2), point = m.you.wins === 2 || m.opp.wins === 2;
+      const board = document.querySelector('#match .board');
+      if (final) FX.banner(board, 'FINAL ROUND', '#ff5d6c', 'Winner takes all');
+      else if (point) FX.banner(board, 'MATCH POINT', '#ffcc33', m.you.wins === 2 ? 'One more to win' : 'Hold the line');
+      else FX.banner(board, `ROUND ${m.round}`, '#8fe3ff', m.round === 1 ? 'FIGHT!' : '');
+      FX.music(final || point ? 'final' : 'arena');
+    }
     $('oppSlot').replaceChildren(m.opp.locked ? backEl() : emptySlot('Opponent'));
     $('mySlot').replaceChildren(m.you.pick !== null ? backEl() : emptySlot('Your card'));
     $('verdict').textContent = m.you.pick !== null ? 'LOCKED · WAITING FOR OPPONENT' : '';
@@ -556,7 +587,7 @@ function renderMatch() {
 }
 $('lock').onclick = async () => {
   const m = S.match; if (!m || S.matchSel === null) return;
-  $('lock').disabled = true; SFX.lock();
+  $('lock').disabled = true; SFX.lock(); showBoard();
   try { await emit('match:pick', { matchId: m.matchId, uid: S.matchSel }); }
   catch (e) { toast(e.message); $('lock').disabled = false; }
 };
@@ -988,42 +1019,8 @@ async function renderHistory() {
     `</tbody></table><p class="note" style="padding:12px">Record ${S.me.wins}W – ${S.me.losses}L – ${S.me.draws}D</p>`;
 }
 
-// ---------- background ----------
-(function () {
-  const cv = $('bg'), ctx = cv.getContext('2d'), P = 4;
-  const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-  const BANDS = ['#0c0a1a', '#120e26', '#1a1233', '#251640', '#34194a', '#4a1f50'];
-  let stars = [], W = 0, H = 0, base = null;
-  function draw() {
-    W = Math.ceil(innerWidth / P); H = Math.ceil(innerHeight / P); cv.width = W; cv.height = H;
-    const img = ctx.createImageData(W, H), d = img.data;
-    const cols = BANDS.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
-    for (let y = 0; y < H; y++) {
-      const t = (y / H) * (cols.length - 1), i = Math.floor(t), f = t - i;
-      for (let x = 0; x < W; x++) {
-        const c = f * 16 > BAYER[y % 4][x % 4] ? cols[Math.min(i + 1, cols.length - 1)] : cols[i];
-        const k = (y * W + x) * 4; d[k] = c[0]; d[k + 1] = c[1]; d[k + 2] = c[2]; d[k + 3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-    const r = rng(77);
-    const mx = Math.floor(W * .82), my = Math.floor(H * .16), mr = Math.max(5, Math.floor(Math.min(W, H) * .05));
-    for (let y = -mr; y <= mr; y++) for (let x = -mr; x <= mr; x++) if (x * x + y * y <= mr * mr) { ctx.fillStyle = (x + mr * .4) ** 2 + (y - mr * .3) ** 2 < (mr * .35) ** 2 ? '#d9cfa6' : '#f3ecd6'; ctx.fillRect(mx + x, my + y, 1, 1); }
-    stars = [];
-    for (let i = 0; i < W * H / 140; i++) stars.push([Math.floor(r() * W), Math.floor(r() * H * .6), r() < .15]);
-    stars.forEach(([x, y, big]) => { ctx.fillStyle = big ? '#ffffff' : '#8f86c2'; ctx.fillRect(x, y, 1, 1); });
-    const ridge = (col, baseY, amp, freq, seed) => {
-      const ph = rng(seed)() * 10; ctx.fillStyle = col;
-      for (let x = 0; x < W; x++) { const h = Math.sin(x * freq + ph) * amp + Math.sin(x * freq * 2.7 + ph * 2) * amp * .45 + Math.sin(x * freq * 7.1) * amp * .12; const top = Math.floor(baseY - h); ctx.fillRect(x, top, 1, H - top); }
-    };
-    ridge('#1f1538', H * .78, H * .09, .035, 3); ridge('#150f28', H * .88, H * .07, .06, 9);
-    ctx.fillStyle = '#0c0a1a'; ctx.fillRect(0, Math.floor(H * .95), W, H);
-    base = ctx.getImageData(0, 0, W, H);
-  }
-  draw();
-  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 150); });
-  if (!reduced) setInterval(() => { if (!base) return; ctx.putImageData(base, 0, 0); for (let i = 0; i < 6; i++) { const s = stars[Math.floor(Math.random() * stars.length)]; if (s) { ctx.fillStyle = '#ffcc33'; ctx.fillRect(s[0], s[1], 1, 1); } } }, 700);
-})();
+// ---------- atmosphere (music, world scenes, battle effects live in fx.js) ----------
+FX.init();
 
 drawSprite($('logoArt'), 11 * 31 + 5, 'fire', 'legendary');
 boot().catch(e => renderLogin(e.message));

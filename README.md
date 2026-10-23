@@ -18,6 +18,15 @@ Pixel art NFT kart düellosu. Oyuncular MetaMask ile giriş yapar, takma ad seç
 - **Forge (kart birleştirme):** Aynı nadirlikte 2-4 kart birleştirilir. Başarı şansı `1 − (1 − taban)^(kart − 1)`; tabanlar common→rare %40, rare→epic %25, epic→legendary %12. Başarıda bir üst nadirlikte rastgele kart, başarısızlıkta aynı nadirlikte rastgele bir kart geri gelir; kullanılan kartlar her durumda harcanır ve ücret (5.000 / 20.000 / 60.000 FLIP) yakılır. Oyuncu en az 5 kartla kalır. Oranlar ve beklenen maliyetler: `node scripts/fusion-sim.js`.
 - **Bota karşı antrenman:** Ücretsiz, her zaman açık; FLIP, ELO ve maç geçmişini etkilemez. Easy, Normal ve Hard seviyeleri var; bot senin destenin aynısıyla oynar (ayna maç), sonucu sadece hamleler belirler.
 
+## Atmosfer
+
+`public/fx.js` tamamen tarayıcıda üretilen müzik, sahne ve savaş efektlerini içerir; ses ya da görsel dosyası yoktur.
+
+- **Müzik:** Web Audio ile çalan üç chiptune parça: lobi (sakin), arena (davullu) ve son tur / maç sayısı (hızlı, gergin). Parçalar ölçü başında geçiş yapar. Forge'da ateş çıtırtısı, Market'te ara sıra para sesi var. MUSIC ve SFX düğmeleri ayrı ayrı açılıp kapanır.
+- **Sahneler:** Lobi gece gökyüzü (kayan yıldızlar), Rookie ve antrenman alacakaranlıkta çayır (ateş böcekleri), Veteran yanardağ (kor ve kül), Legend gökyüzü tapınağı (bulutlar, uçan adalar, ışıltılar).
+- **Savaş:** Kartlar açıldıktan sonra yaratıklar ortada çarpışır; vuruş anında kısa donma, ekran sarsıntısı ve kazananın element efektleri (ateş kıvılcımı, su damlaları, rüzgâr girdabı, toprak parçaları). Kaybeden piksel piksel dağılır. Element avantajında "SUPER EFFECTIVE!", yorgun kartlarda "EXHAUSTED" yazısı çıkar. Tur başında ROUND / MATCH POINT / FINAL ROUND afişleri.
+- **Canlılık:** Kartlardaki yaratıklar nefes alır ve göz kırpar. "Hareketi azalt" ayarı açık cihazlarda animasyonlar kapanır.
+
 ## Yerelde çalıştırma
 
 Node.js 18 veya üzeri ve bir Postgres veritabanı gerekir (Neon'un ücretsiz veritabanını yerelde de kullanabilirsin).
