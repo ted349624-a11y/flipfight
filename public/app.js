@@ -391,8 +391,19 @@ $('nickForm').onsubmit = async e => {
 };
 
 // ---------- X tasks (one time, before the first game) ----------
+// The tasks come first, on the very first visit (before the wallet). They're kept in this browser and sent to the
+// server right after sign-in; the server still checks them before letting an account play.
 const needX = () => !!(S.cfg && S.cfg.xQuests && S.me && !S.me.xDone);
-function afterNick() { if (needX()) renderXQuests(); else enterApp(); }
+const xqComplete = st => !!(S.cfg && S.cfg.xQuests && st && /^@?[A-Za-z0-9_]{1,15}$/.test(st.user || '') && S.cfg.xQuests.tasks.every(t => st.done && st.done[t]));
+async function afterNick() {
+  if (!needX()) return enterApp();
+  const st = xqLoad();
+  if (!xqComplete(st)) return renderXQuests();
+  try {
+    const res = await api('/api/x-quests', { username: st.user.replace(/^@/, ''), tasks: S.cfg.xQuests.tasks });
+    S.me = res.profile; enterApp();
+  } catch (err) { renderXQuests(err.message); }
+}
 const XQ_INFO = {
   follow: ['Follow', h => `Follow @${h} on X`],
   notify: ['Bell', h => `Turn on notifications 🔔 for @${h}`],
@@ -411,16 +422,17 @@ function xqUrl(t) {
     reply: `https://x.com/intent/post?in_reply_to=${x.tweetId}&text=${encodeURIComponent(x.reply || '')}`,
   }[t];
 }
-const XQ_KEY = () => 'ff-xq-' + (S.me ? S.me.id : '');
+const XQ_KEY = () => 'ff-xq';
 function xqLoad() { try { return JSON.parse(localStorage.getItem(XQ_KEY()) || '{}'); } catch (e) { return {}; } }
 function xqSave(st) { try { localStorage.setItem(XQ_KEY(), JSON.stringify(st)); } catch (e) {} }
 let XQ = { done: {}, pending: null };
-function renderXQuests() {
-  $('walletBar').hidden = false; $('tabs').hidden = true; updateTop();
+function renderXQuests(msg) {
+  $('walletBar').hidden = !S.me; $('tabs').hidden = true; if (S.me) updateTop();
   const saved = xqLoad();
   XQ = { done: saved.done || {}, pending: null };
-  $('xqUser').value = saved.user || S.me.xUsername || '';
-  $('xqErr').textContent = '';
+  $('xqUser').value = saved.user || (S.me && S.me.xUsername) || '';
+  $('xqErr').textContent = msg || '';
+  $('xqGo').textContent = S.me ? 'Enter the island' : 'Continue';
   drawXQ(); show('xquests');
 }
 function drawXQ() {
@@ -463,10 +475,11 @@ $('xqUser').oninput = () => { xqSave({ done: XQ.done, user: $('xqUser').value.tr
 $('xqForm').onsubmit = async e => {
   e.preventDefault();
   $('xqErr').textContent = '';
+  xqSave({ done: XQ.done, user: $('xqUser').value.trim() });
+  if (!S.me) { SFX.coin(); return renderLogin(); } // first visit: tasks done, now connect a wallet
   try {
     const res = await api('/api/x-quests', { username: $('xqUser').value.trim().replace(/^@/, ''), tasks: S.cfg.xQuests.tasks.filter(t => XQ.done[t]) });
     S.me = res.profile; SFX.coin();
-    try { localStorage.removeItem(XQ_KEY()); } catch (err) {}
     enterApp();
   } catch (err) { $('xqErr').textContent = err.message; }
 };
@@ -476,7 +489,7 @@ async function boot() {
   if (!S.cfg) S.cfg = await api('/api/config');
   if (S.cfg.clan) Island.setClanColors(S.cfg.clan.colors);
   renderGuide();
-  if (!S.token) return renderLogin();
+  if (!S.token) return S.cfg.xQuests && !xqComplete(xqLoad()) ? renderXQuests() : renderLogin();
   let me;
   try { me = await api('/api/me'); } catch (e) { return renderLogin(S.token ? e.message : ''); }
   if (!S.token) return;
