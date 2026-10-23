@@ -326,6 +326,12 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
       const upd = (s, d, uid) => db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(s)} = ${col(s)} + 1,
                                             season_played = season_played + 1, season_${col(s)} = season_${col(s)} + 1 WHERE id = $2`, [d, uid], c);
       if (winnerIdx !== null && onWinTx) await onWinTx(m.players[winnerIdx].userId, c); // clan season point
+      // living cards: every card played gets a round played, and a round won if it took the round
+      const tally = new Map();
+      for (const r of m.log) r.cards.forEach((card, i) => {
+        const t = tally.get(card.uid) || { plays: 0, wins: 0 }; t.plays++; if (r.winner === i) t.wins++; tally.set(card.uid, t);
+      });
+      for (const [uid, t] of tally) await db.query('UPDATE cards SET plays = plays + $1, wins = wins + $2 WHERE uid = $3', [t.plays, t.wins, uid], c);
       await upd(s1, d1, p1.userId);
       await upd(1 - s1, d2, p2.userId);
       await db.query(`INSERT INTO matches(id, room_id, p1, p2, winner_id, p1_wins, p2_wins, stake, rake, p1_elo_delta, p2_elo_delta, created_at)

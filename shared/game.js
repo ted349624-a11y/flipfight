@@ -172,10 +172,20 @@ const MATCH = { energy: 15, rounds: 5, winsNeeded: 3, turnMs: 20000, revealMs: 2
 // at the current level. Max x4. No answer in time = accept if they can afford it.
 const FLIP_CALL = { fromRound: 2, maxMult: 4, answerMs: 12000 };
 
+// Living cards: every card keeps its own history (rounds played and won in ranked matches, how many players
+// have owned it). Round wins evolve its look: stage 2 at 25 wins, stage 3 at 100. Cosmetic only, power never changes.
+const EVOLVE = { stage2: 25, stage3: 100 };
+const stageOf = wins => (wins >= EVOLVE.stage3 ? 3 : wins >= EVOLVE.stage2 ? 2 : 1);
+
 function cardView(row) {
   const t = TEMPLATES[row.tpl], b = BACKS[row.tpl];
-  return { uid: row.uid, tpl: row.tpl, name: t[0], el: t[1], rar: t[2], pow: t[3], tid: '#' + String(row.token_no).padStart(4, '0'),
+  const v = { uid: row.uid, tpl: row.tpl, name: t[0], el: t[1], rar: t[2], pow: t[3], tid: '#' + String(row.token_no).padStart(4, '0'),
     back: { name: b[0], el: b[1], pow: b[2], ab: b[3] } };
+  if (row.plays !== undefined) {
+    const wins = Number(row.wins || 0);
+    v.life = { plays: Number(row.plays || 0), wins, owners: Number(row.owners || 1), stage: stageOf(wins) };
+  }
+  return v;
 }
 // The side of a card that is face up: 0 = front (no ability), 1 = back (with an ability).
 function faceOf(card, face) { return face === 1 ? card.back : { name: card.name, el: card.el, pow: card.pow, ab: null }; }
@@ -221,4 +231,4 @@ function clash(a, b) {
   };
 }
 
-module.exports = { CLAN, clanBannerOk, FLIP_CALL, BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { EVOLVE, stageOf, CLAN, clanBannerOk, FLIP_CALL, BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

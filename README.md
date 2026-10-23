@@ -123,6 +123,10 @@ Her kartın bir ön ve bir arka yüzü var. Maçta kartı seçince hangi yüzün
 - Üyelerin her ranked galibiyeti klana 1 sezon puanı verir; sezonun lider klanının sancağı ada meydanındaki direkte dalgalanır. Sezon bitince puanlar sıfırlanır.
 - Adada yeni bina: CLANS. Test: `node scripts/clan-test.js <url> <previewKey>`.
 
+## Yaşayan kartlar
+
+Her kart kendi geçmişini tutar: ranked maçlarda oynadığı ve kazandığı tur sayısı ve kaç sahip değiştirdiği (Market satışları). Kartın üstünde "31W/44 · 2 own" gibi görünür. 25 tur galibiyetinde kart evrimleşir (★, parlayan çerçeve), 100 galibiyette efsane görünüme geçer (★★, altın çerçeve ve parıltı). Sadece görünüm değişir, güç aynı kalır. Antrenman maçları sayılmaz.
+
 ## Kurucu (founder) hesabı
 
 Render → Environment kısmına ekle:

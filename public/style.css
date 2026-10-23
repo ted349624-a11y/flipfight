@@ -641,3 +641,12 @@ body:not(.on-island) .wrap::before{content:"";position:fixed;top:0;bottom:0;left
 .clan-editor .preview b{font-weight:400;font-size:20px}
 .clan-editor .foot{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 @media (max-width:640px){.clan-editor{grid-template-columns:1fr}.clan-editor .preview{grid-row:auto;grid-column:1}.clan-panel{grid-template-columns:1fr}.clan-panel .big{width:72px;height:84px}}
+
+/* living cards */
+.life{font-size:14px;line-height:1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stagetag{position:absolute;top:2px;right:2px;font-size:12px;line-height:1;padding:2px 3px;background:#0b0916;color:var(--gold)}
+.card.st2{box-shadow:-4px 0 0 0 var(--rc),4px 0 0 0 var(--rc),0 -4px 0 0 var(--rc),0 4px 0 0 var(--rc),0 8px 0 0 rgba(0,0,0,.4),0 0 14px 2px color-mix(in srgb,var(--rc) 55%,transparent)}
+.card.st3{box-shadow:-4px 0 0 0 #ffcc33,4px 0 0 0 #ffcc33,0 -4px 0 0 #ffcc33,0 4px 0 0 #ffcc33,0 8px 0 0 rgba(0,0,0,.4),0 0 18px 4px rgba(255,204,51,.45);animation:evolved 2.8s ease-in-out infinite}
+.card.st3 .cname{color:var(--gold)}
+@keyframes evolved{50%{box-shadow:-4px 0 0 0 #fff3c4,4px 0 0 0 #fff3c4,0 -4px 0 0 #fff3c4,0 4px 0 0 #fff3c4,0 8px 0 0 rgba(0,0,0,.4),0 0 26px 6px rgba(255,204,51,.6)}}
+@media (prefers-reduced-motion:reduce){.card.st3{animation:none}}

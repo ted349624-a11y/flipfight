@@ -112,7 +112,7 @@ const route = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catc
 const q = {
   userById: (id, c) => db.one('SELECT * FROM users WHERE id = $1', [id], c),
   userByAddress: a => db.one('SELECT * FROM users WHERE address = $1', [a]),
-  cardsOf: (id, c) => db.all(`SELECT c.uid, c.tpl, c.token_no, l.id AS listing_id, l.price AS listing_price FROM cards c
+  cardsOf: (id, c) => db.all(`SELECT c.uid, c.tpl, c.token_no, c.plays, c.wins, c.owners, l.id AS listing_id, l.price AS listing_price FROM cards c
       LEFT JOIN listings l ON l.card_uid = c.uid AND l.status = 'active' WHERE c.owner_id = $1 ORDER BY c.uid`, [id], c),
   insertCard: (owner, tpl, c) => db.one('INSERT INTO cards(owner_id, tpl, token_no, created_at) VALUES($1,$2,$3,$4) RETURNING uid', [owner, tpl, randomTokenNo(), now()], c),
   upsertDeck: (uid, room, uids, c) => db.query(`INSERT INTO decks(user_id, room_id, card_uids) VALUES($1,$2,$3)
@@ -384,9 +384,9 @@ app.get('/api/fusion-stats', route(async (req, res) => {
 const M = G.MARKET;
 const listingView = (r, me) => ({
   id: r.id, price: r.price, createdAt: r.created_at, seller: r.seller_name, mine: me != null && r.seller_id === me,
-  card: G.cardView({ uid: r.card_uid, tpl: r.tpl, token_no: r.token_no }),
+  card: G.cardView({ uid: r.card_uid, tpl: r.tpl, token_no: r.token_no, plays: r.plays, wins: r.wins, owners: r.owners }),
 });
-const LISTING_SQL = `SELECT l.*, u.nickname AS seller_name, c.token_no FROM listings l
+const LISTING_SQL = `SELECT l.*, u.nickname AS seller_name, c.token_no, c.plays, c.wins, c.owners FROM listings l
                      JOIN users u ON u.id = l.seller_id JOIN cards c ON c.uid = l.card_uid`;
 async function marketBroadcast(kind, listingId, extra) {
   // everyone on the Market screen gets the change live
@@ -452,7 +452,7 @@ app.post('/api/market/buy', auth, route(async (req, res) => {
         throw new Error(x && x.seller_id === req.user.id && x.status === 'active' ? 'You cannot buy your own card.' : 'Someone else just bought this card, or it was taken off the market.');
       }
       if (!(await q.spendBalance(req.user.id, l.price, c))) throw new Error('Not enough FLIP to buy this card.');
-      const moved = await db.query('UPDATE cards SET owner_id = $1 WHERE uid = $2 AND owner_id = $3', [req.user.id, l.card_uid, l.seller_id], c);
+      const moved = await db.query('UPDATE cards SET owner_id = $1, owners = owners + 1 WHERE uid = $2 AND owner_id = $3', [req.user.id, l.card_uid, l.seller_id], c);
       if (moved.rowCount !== 1) throw new Error('This card is no longer available.');
       const fee = Math.round(l.price * M.fee);
       await q.addBalance(l.seller_id, l.price - fee, c);

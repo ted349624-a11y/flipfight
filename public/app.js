@@ -72,7 +72,7 @@ const SFX = {
 
 // ---------- pixel art ----------
 function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-function drawSprite(cv, seed, el, rarity) {
+function drawSprite(cv, seed, el, rarity, stage = 1) {
   const N = 12, r = rng(seed * 7919 + 13), ctx = cv.getContext('2d');
   cv.width = N; cv.height = N; ctx.clearRect(0, 0, N, N);
   const g = [...Array(N)].map(() => Array(N).fill(0));
@@ -87,7 +87,7 @@ function drawSprite(cv, seed, el, rarity) {
   const ey = 4 + Math.floor(r() * 2);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const v = o[y][x]; if (!v) continue;
-    ctx.fillStyle = v === 2 ? '#0b0916' : (y >= 8 ? shade : (y <= 4 && r() < .35 ? hi : main));
+    ctx.fillStyle = v === 2 ? (stage >= 3 ? '#ffcc33' : stage === 2 ? hi : '#0b0916') : (y >= 8 ? shade : (y <= 4 && r() < .35 ? hi : main));
     ctx.fillRect(x, y, 1, 1);
   }
   cv.dataset.ey = ey; cv.dataset.main = main;
@@ -95,6 +95,7 @@ function drawSprite(cv, seed, el, rarity) {
   ctx.fillStyle = '#0b0916'; ctx.fillRect(4, ey + 1, 1, 1); ctx.fillRect(7, ey + 1, 1, 1);
   if (rarity === 'legendary') { ctx.fillStyle = '#ffcc33'; [[4, 0], [6, 0], [5, 1], [4, 1], [6, 1], [7, 0]].forEach(([x, y]) => ctx.fillRect(x, y, 1, 1)); }
   if (rarity === 'epic') { ctx.fillStyle = '#e0b8ff'; ctx.fillRect(1, 1, 1, 1); ctx.fillRect(10, 2, 1, 1); }
+  if (stage >= 3) { ctx.fillStyle = '#fff3c4'; [[0, 0], [11, 1], [0, 10], [11, 11], [1, 5]].forEach(([x, y]) => ctx.fillRect(x, y, 1, 1)); } // evolved sparkle
 }
 function drawPack(cv, el, premium) {
   const W = 12, H = 16, ctx = cv.getContext('2d'); cv.width = W; cv.height = H;
@@ -121,14 +122,16 @@ function cardEl(c, opts = {}) {
   const s = playedCard ? { name: c.name, el: c.el, pow: c.pow, ab: c.ab } : sideOf(c, face);
   const other = !playedCard && c.back ? sideOf(c, 1 - face) : null;
   const b = document.createElement(opts.static ? 'div' : 'button');
-  b.className = 'card' + (opts.static ? ' static' : '') + (face ? ' is-back' : '') + (playedCard && c.flipped ? ' trapped' : '');
+  const life = c.life, stage = life ? life.stage : 1;
+  b.className = 'card' + (opts.static ? ' static' : '') + (face ? ' is-back' : '') + (playedCard && c.flipped ? ' trapped' : '') + (stage > 1 ? ' st' + stage : '');
   b.style.setProperty('--rc', RAR_COLORS[c.rar]);
   if (!opts.static) b.type = 'button';
   b.innerHTML = `<div class="ct"><span class="cost" title="Energy cost: ${rar(c.rar).cost} of your 15 energy"><svg class="bolt" viewBox="0 0 5 8" aria-hidden="true"><path d="M2 0h1v1h-1zM3 0h1v1h-1zM4 0h1v1h-1zM2 1h1v1h-1zM3 1h1v1h-1zM1 2h1v1h-1zM2 2h1v1h-1zM0 3h1v1h-1zM1 3h1v1h-1zM2 3h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM2 4h1v1h-1zM3 4h1v1h-1zM1 5h1v1h-1zM2 5h1v1h-1zM1 6h1v1h-1zM0 7h1v1h-1z" fill="currentColor"/></svg>${rar(c.rar).cost}</span><span class="el e-${s.el}">${elName(s.el)}</span></div>
-    <div class="artwrap"><canvas class="art"></canvas>${s.ab ? `<span class="abil" title="${esc(abText(s.ab))}">${esc(abName(s.ab))}</span>` : ''}${face ? '<span class="sidetag">BACK</span>' : ''}</div><div class="cname">${esc(s.name)}</div>
+    <div class="artwrap"><canvas class="art"></canvas>${s.ab ? `<span class="abil" title="${esc(abText(s.ab))}">${esc(abName(s.ab))}</span>` : ''}${face ? '<span class="sidetag">BACK</span>' : ''}${stage > 1 ? `<span class="stagetag" title="Evolved: ${life.wins} round wins">${'★'.repeat(stage - 1)}</span>` : ''}</div><div class="cname">${esc(s.name)}</div>
     <div class="cf"><span class="pow num">${s.pow}</span><span class="tid">${esc(c.tid)}</span></div>
+    ${life && (life.plays || life.owners > 1) ? `<div class="life" title="${life.plays} rounds played and ${life.wins} won in ranked matches · ${life.owners} owner${life.owners > 1 ? 's' : ''}${stage > 1 ? ' · evolved' : ''}">${life.wins}W/${life.plays}${life.owners > 1 ? ` · ${life.owners} own` : ''}</div>` : ''}
     ${other ? `<div class="other" title="Other side: ${esc(other.name)}, ${elName(other.el)} ${other.pow}${other.ab ? ', ' + esc(abName(other.ab)) : ''}">↻ <i class="e-${other.el}"></i>${other.pow}${other.ab ? ' ' + esc(abName(other.ab)) : ''}</div>` : ''}<span class="rar">${rar(c.rar).name}</span>`;
-  drawSprite(b.querySelector('canvas'), spriteSeed(c) + (face ? 7777 : 0), s.el, c.rar);
+  drawSprite(b.querySelector('canvas'), spriteSeed(c) + (face ? 7777 : 0), s.el, c.rar, stage);
   if (opts.flip && c.back) {
     const f = document.createElement('span'); f.className = 'flipbtn'; f.setAttribute('role', 'button'); f.tabIndex = 0; f.textContent = '↻';
     f.title = 'Show the other side'; f.setAttribute('aria-label', 'Show the other side');
