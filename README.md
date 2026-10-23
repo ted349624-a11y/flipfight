@@ -52,6 +52,13 @@ node scripts/smoke-test.js http://localhost:3000
 - Veriler Neon'da tutulduğu için sunucu uyusa veya yeniden başlasa da kaybolmaz. Sadece o an sürmekte olan maçlar yarıda kalır.
 - Oyun büyüdüğünde Render'ın ücretli planına geçmek uyku sorununu çözer, kodda değişiklik gerekmez.
 
+## "Coming soon" modu
+
+Varsayılan olarak açık. Siteye gelenler tanıtım sayfasını görür; oyun, hesaplar ve veriler arkada çalışmaya devam eder.
+
+- **Önizleme:** Render'da `PREVIEW_KEY` değişkenine gizli bir değer gir. `https://flipfight.fun/?preview=GIZLI_DEGER` adresini bir kez açan tarayıcı 90 gün boyunca oyuna girebilir.
+- **Açılış:** Render'da `COMING_SOON` değişkenini `off` yap. Servis yeniden başlar ve oyun herkese açılır.
+
 ## Mobil oyuncular
 
 Mobil tarayıcılarda MetaMask eklentisi yoktur. Site bunu algılar ve "Open in MetaMask app" düğmesi gösterir; oyun MetaMask uygulamasının içindeki tarayıcıda açılır.

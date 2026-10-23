@@ -16,6 +16,18 @@ const NONCE_MS = 10 * 60 * 1000;
 // Sites allowed to call this server from another domain. Comma-separated. Not needed when everything runs on one host.
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean);
 
+// Coming-soon mode: visitors see a teaser page while the game keeps running behind it.
+// On by default. Set COMING_SOON=off on the host to open the game to everyone.
+// Anyone who opens /?preview=<PREVIEW_KEY> once gets a cookie that lets them in.
+const COMING_SOON = !/^(off|false|0|no)$/i.test(process.env.COMING_SOON || 'on');
+const PREVIEW_KEY = process.env.PREVIEW_KEY || '';
+const PREVIEW_COOKIE = 'ff_preview';
+function readCookie(header, name) {
+  const m = (header || '').match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : '';
+}
+const hasPreview = cookieHeader => !!PREVIEW_KEY && readCookie(cookieHeader, PREVIEW_COOKIE) === PREVIEW_KEY;
+
 const app = express();
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
@@ -32,6 +44,20 @@ app.use((req, res, next) => {
 // Tolerate doubled slashes in typed URLs (e.g. "site.com//healthz").
 app.use((req, res, next) => { if (req.url.includes('//')) req.url = req.url.replace(/\/{2,}/g, '/'); next(); });
 app.use(express.json({ limit: '20kb' }));
+
+if (COMING_SOON) {
+  app.use((req, res, next) => {
+    if (req.path === '/healthz') return next();
+    if (PREVIEW_KEY && req.query.preview === PREVIEW_KEY) {
+      res.setHeader('Set-Cookie', `${PREVIEW_COOKIE}=${encodeURIComponent(PREVIEW_KEY)}; Path=/; Max-Age=${60 * 60 * 24 * 90}; HttpOnly; SameSite=Lax${req.secure ? '; Secure' : ''}`);
+      return res.redirect('/');
+    }
+    if (hasPreview(req.headers.cookie)) return next();
+    if (req.path.startsWith('/api/')) return res.status(503).json({ error: 'Flipfight is coming soon.' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, '..', 'public', 'coming-soon.html'));
+  });
+}
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const now = () => Date.now();
@@ -260,13 +286,14 @@ app.get('/api/history', auth, route(async (req, res) => {
   });
 }));
 
-app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get('/healthz', (req, res) => res.json({ ok: true, comingSoon: COMING_SOON }));
 
 // ---------- realtime ----------
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : false } });
 
 io.use((socket, next) => {
+  if (COMING_SOON && !hasPreview(socket.handshake.headers.cookie)) return next(new Error('coming_soon'));
   sessionUser(socket.handshake.auth && socket.handshake.auth.token).then(user => {
     if (!user) return next(new Error('unauthorized'));
     if (!user.nickname) return next(new Error('nickname_required'));
