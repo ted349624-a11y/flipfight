@@ -18,7 +18,6 @@
       <div><h1>FLIPFIGHT</h1><small>NFT card duels</small></div>
     </div>
     <div class="wallet" id="walletBar" hidden>
-      <span class="chip">DEMO TOKENS</span>
       <button class="sfx" id="sfx" aria-pressed="true">SFX ON</button>
       <div class="stat"><b class="num" id="bal">0</b><span>FLIP</span></div>
       <div class="stat"><b class="num" id="elo">1200</b><span>ELO</span></div>
@@ -31,10 +30,10 @@
     <div class="frame login">
       <canvas id="loginArt" width="12" height="12"></canvas>
       <h2>Flip cards. Beat real players.</h2>
-      <p>Connect MetaMask to sign in. New players get 200,000 demo FLIP, 12 starter cards and 2 free packs.</p>
+      <p>Connect MetaMask to sign in. New players get 200,000 FLIP, 12 starter cards and 2 free packs.</p>
       <button class="btn" id="connect">Connect MetaMask</button>
       <p class="err" id="loginErr" role="alert"></p>
-      <div class="facts"><span>FREE SIGNATURE</span><span>NO TRANSACTION</span><span>DEMO TOKENS ONLY</span></div>
+      <div class="facts"><span>FREE SIGNATURE</span><span>NO TRANSACTION</span><span>NO GAS FEES</span></div>
     </div>
   </section>
 
@@ -346,11 +345,10 @@
         </ul>
       </div>
 
-      <p class="g-note">FLIP tokens and cards in this demo have no real-world value and are not on any blockchain.</p>
+      <p class="g-note">FLIP and cards are in-game items with no cash value.</p>
     </div>
   </details>
 
-  <footer>Target network: Robinhood Chain (EVM L2). Tokens and cards are demo assets stored on this server. Nothing is sent on-chain.</footer>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.0/dist/socket.io.min.js"></script>
