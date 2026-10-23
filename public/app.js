@@ -151,10 +151,16 @@ function show(id) {
   if (id !== 'island') Island.unmount();
   current = id; SCREENS.forEach(s => ($(s).hidden = s !== id));
   document.body.classList.toggle('on-island', id === 'island');
+  watchFeed();
   if (S.me && S.me.nickname && id !== 'login' && id !== 'nickname') $('tabs').hidden = id === 'island';
   if (id !== 'forge') $('fgBar').hidden = true;
   atmosphere(id);
   $('guide').hidden = !(id === 'login' || id === 'arena');
+}
+// Ask the server only for the live feed this screen shows (room counts or market changes).
+function watchFeed() {
+  const want = ['arena', 'deck', 'queue'].includes(current) ? 'lobby' : current === 'market' ? 'market' : '';
+  if (S.socket && S.socket.connected && S.watching !== want) { S.watching = want; S.socket.emit('watch', want); }
 }
 // World scene, music and ambience for each screen
 const roomScene = id => (id === 2 ? 'volcano' : id === 3 ? 'temple' : 'meadow');
@@ -314,7 +320,7 @@ function connectSocket() {
   const auth = { token: S.token, preview: PREVIEW };
   const s = API ? io(API, { auth }) : io({ auth });
   S.socket = s;
-  s.on('connect', () => { if (current === 'island') renderIsland(); }); // rejoin the island after a reconnect
+  s.on('connect', () => { S.watching = null; watchFeed(); if (current === 'island') renderIsland(); }); // rejoin feeds and the island after a reconnect
   s.on('connect_error', err => {
     if (err.message === 'unauthorized') signOut(true);
     else if (err.message === 'nickname_required') renderNickname();
@@ -350,16 +356,38 @@ function renderIsland() {
   Island.mount($('islandView'), {
     socket: S.socket, me: S.me,
     onEnter: id => { SFX.found(); setTab(BUILDING_TAB[id]); },
-    onCount: n => { $('islandOnline').textContent = `● ${n} ONLINE`; },
+    onCount: (n, ch, cap) => { $('islandOnline').textContent = `● ISLAND #${ch || 1} · ${n}${cap ? '/' + cap : ''}`; },
   });
   $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" data-b="${b.id}">${b.label}</button>`).join('') +
     '<hr><button type="button" data-act="sfx"></button><button type="button" class="muted" data-act="out">SIGN OUT</button>';
   closeIslandMenu(); updateTop();
   $('islandHint').classList.remove('gone'); clearTimeout(hintTimer); hintTimer = setTimeout(() => $('islandHint').classList.add('gone'), 6000);
 }
-function closeIslandMenu() { $('islandQuick').hidden = true; $('islandMenu').setAttribute('aria-expanded', false); }
+function closeIslandMenu() {
+  $('islandQuick').hidden = true; $('islandMenu').setAttribute('aria-expanded', false);
+  $('chanMenu').hidden = true; $('islandOnline').setAttribute('aria-expanded', false);
+}
+// Island channels: copies of the island with up to 50 players each
+$('islandOnline').onclick = () => {
+  const open = $('chanMenu').hidden; closeIslandMenu(); SFX.click();
+  if (!open) return;
+  $('chanMenu').hidden = false; $('islandOnline').setAttribute('aria-expanded', true);
+  $('chanMenu').innerHTML = '<p>Loading channels…</p>';
+  Island.channels(r => {
+    if (!r) { $('chanMenu').innerHTML = '<p>Could not load channels.</p>'; return; }
+    const cur = Island.state().channel, chans = r.channels.slice();
+    let n = 1; while (chans.some(c => c.id === n)) n++;
+    chans.push({ id: n, players: 0, cap: r.cap, fresh: true });
+    $('chanMenu').innerHTML = '<p>Each island holds up to ' + r.cap + ' players.</p>' + chans.map(c =>
+      `<button type="button" class="chan" data-ch="${c.id}" aria-current="${c.id === cur}" ${c.players >= c.cap && c.id !== cur ? 'disabled' : ''}>ISLAND #${c.id}<span>${c.fresh ? 'NEW' : c.players + '/' + c.cap}</span></button>`).join('');
+  });
+};
+$('chanMenu').onclick = e => {
+  const b = e.target.closest('[data-ch]'); if (!b || b.disabled) return;
+  SFX.click(); closeIslandMenu(); Island.switchChannel(Number(b.dataset.ch));
+};
 $('islandMenu').onclick = () => {
-  const open = $('islandQuick').hidden; $('islandQuick').hidden = !open; $('islandMenu').setAttribute('aria-expanded', open); SFX.click();
+  const open = $('islandQuick').hidden; closeIslandMenu(); $('islandQuick').hidden = !open; $('islandMenu').setAttribute('aria-expanded', open); SFX.click();
 };
 $('islandQuick').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -713,7 +741,7 @@ async function renderMarket() {
 function onMarketUpdate(u) {
   const L = u.listing;
   if (!L) return;
-  L.mine = !!S.me && L.seller === S.me.nickname; // broadcasts go to everyone, so work out ownership here
+  L.mine = !!S.me && L.seller === S.me.nickname; // broadcasts are shared, so work out ownership here
   if (u.kind === 'listed') { if (!MK.listings.some(x => x.id === L.id)) MK.listings.unshift(L); }
   else {
     MK.listings = MK.listings.filter(x => x.id !== L.id);

@@ -17,17 +17,21 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
   const bot = createBot(G);
   const BOT_ID = -1;
 
-  // Lobby counts go to everyone, so changes are batched: at most one broadcast per second, and only if something changed.
+  // Lobby counts only go to players looking at the rooms (socket room 'w:lobby'), batched to at most one
+  // broadcast per second and only when something changed.
   let lobbyTimer = null, lastLobby = '';
+  function lobbySnapshot() {
+    const waiting = {};
+    for (const [roomId, list] of queues) waiting[roomId] = list.length;
+    return { online: sockets.size, waiting, playing: userMatch.size };
+  }
   function broadcastLobby() {
     if (lobbyTimer) return;
     lobbyTimer = setTimeout(() => {
       lobbyTimer = null;
-      const waiting = {};
-      for (const [roomId, list] of queues) waiting[roomId] = list.length;
-      const msg = { online: sockets.size, waiting, playing: userMatch.size }, key = JSON.stringify(msg);
+      const msg = lobbySnapshot(), key = JSON.stringify(msg);
       if (key === lastLobby) return;
-      lastLobby = key; io.emit('lobby', msg);
+      lastLobby = key; io.to('w:lobby').emit('lobby', msg);
     }, 1000);
   }
 
@@ -283,7 +287,6 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     const prev = sockets.get(userId);
     if (prev && prev !== socket) { prev.emit('session:replaced'); prev.disconnect(true); }
     sockets.set(userId, socket);
-    { const waiting = {}; for (const [roomId, list] of queues) waiting[roomId] = list.length; socket.emit('lobby', { online: sockets.size, waiting, playing: userMatch.size }); }
 
     const handle = (fn, work) => Promise.resolve().then(work)
       .then(r => { if (typeof fn === 'function') fn({ ok: true, ...r }); })
@@ -316,6 +319,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
 
   return {
     onConnection,
+    lobbySnapshot,
     onlineCount: () => sockets.size,
     activeMatchOf: userId => userMatch.get(userId) || null,
     notify: (userId, ev, data) => emitTo(userId, ev, data),

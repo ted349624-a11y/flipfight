@@ -829,6 +829,15 @@ function resize() {
 }
 
 // ---------- network ----------
+// Join (or switch to) an island channel; the server answers with everyone on it.
+function enterChannel(ch) {
+  if (!I.socket || !I.me) return;
+  I.socket.emit('island:enter', { x: Math.round(I.me.x), y: Math.round(I.me.y), channel: ch || undefined }, r => {
+    if (!r || !r.ok || !I.mounted) return;
+    I.channel = r.channel; I.cap = r.cap;
+    applyFull(r.players, I.me.id);
+  });
+}
 // The server sends full profiles once (enter ack, 'island:join') and then only compact position deltas.
 function addOther(id, nick, addr, elo, x, y, fl, emote) {
   let o = I.others.get(id);
@@ -836,7 +845,7 @@ function addOther(id, nick, addr, elo, x, y, fl, emote) {
   Object.assign(o, { nick, elo, look: lookOf(addr), tx: x, ty: y, dir: fl & 3, moving: !!(fl & 4) });
   if (emote) { o.emote = emote; o.emoteUntil = performance.now() + 3000; }
 }
-const countChanged = () => I.onCount && I.onCount(I.others.size + 1);
+const countChanged = () => I.onCount && I.onCount(I.others.size + 1, I.channel, I.cap);
 function applyFull(list, myId) {
   I.others.clear();
   for (const [id, nick, addr, elo, x, y, fl, emote] of list) if (id !== myId) addOther(id, nick, addr, elo, x, y, fl, emote);
@@ -879,7 +888,7 @@ window.Island = {
       socket.on('island:join', d => { if (Array.isArray(d) && d[0] !== me.id) { addOther(...d); countChanged(); } });
       socket.on('island:left', id => { I.others.delete(id); countChanged(); });
       socket.on('island:emote', ([id, e]) => { const o = I.others.get(id); if (o) { o.emote = e; o.emoteUntil = performance.now() + 3000; } });
-      socket.emit('island:enter', { x: I.me.x, y: I.me.y }, r => { if (r && r.ok) applyFull(r.players, me.id); });
+      enterChannel(I.channel);
     }
     cancelAnimationFrame(I.raf); I.raf = requestAnimationFrame(loop);
     requestAnimationFrame(resize); // the canvas may only get its final size after layout
@@ -895,6 +904,8 @@ window.Island = {
   goTo(id) { const b = BUILDINGS.find(x => x.id === id); if (b && I.mounted) { I.pending = b.id; I.cooldownDoor = null; I.path = findPath(I.me.x, I.me.y, b.door.x, b.door.y + 2); } },
   resize,
   zoom(n) { I.zoom = n || 0; resize(); },
-  state: () => ({ me: I.me && { x: Math.round(I.me.x), y: Math.round(I.me.y), dir: I.me.dir }, others: [...I.others.values()].map(o => ({ nick: o.nick, x: Math.round(o.tx), y: Math.round(o.ty), emote: o.emoteUntil > performance.now() ? o.emote : '' })), path: I.path.length, scale: I.scale, view: [I.vw, I.vh] }),
+  channels(cb) { if (I.socket) I.socket.emit('island:channels', r => cb(r && r.ok ? r : null)); else cb(null); },
+  switchChannel(n) { if (I.mounted && n !== I.channel) { I.others.clear(); enterChannel(n); } },
+  state: () => ({ channel: I.channel, me: I.me && { x: Math.round(I.me.x), y: Math.round(I.me.y), dir: I.me.dir }, others: [...I.others.values()].map(o => ({ nick: o.nick, x: Math.round(o.tx), y: Math.round(o.ty), emote: o.emoteUntil > performance.now() ? o.emote : '' })), path: I.path.length, scale: I.scale, view: [I.vw, I.vh] }),
 };
 })();

@@ -104,6 +104,19 @@ public/            Oyun arayüzü (HTML, CSS, JS)
 scripts/smoke-test.js  Uçtan uca test
 ```
 
+## Ölçek ve trafik
+
+Render'ın ücretsiz planında aylık dahil trafik 5 GB, CPU 0.1. Trafiği düşük tutmak için:
+
+- **Ada kanalları:** Ada, en fazla 50 kişilik kopyalara bölünür ("ISLAND #2" gibi). Yeni gelen, yer olan en kalabalık kanala girer; oyuncu sol üstteki çipten kanal değiştirebilir. Kapasite `ISLAND_CHANNEL_CAP` ortam değişkeniyle değiştirilebilir.
+- **Küçük konum paketleri:** Profil bilgisi sadece girişte bir kez gider; konumlar saniyede 5 kez ve sadece hareket edenler için sayı dizisi olarak gider.
+- **Canlı akışlar sadece izleyene:** Oda sayıları sadece Arena ekranındakilere, Market değişiklikleri sadece Market ekranındakilere gider.
+- **Sıkıştırma ve önbellek:** JS/CSS/HTML dosyaları açılışta bir kez gzip'lenir (≈216 KB → ≈66 KB) ve ETag ile sunulur; tekrar gelen ziyaretçi sadece "değişmedi" cevabı alır.
+- **Oturum önbelleği:** Oturum kontrolü 5 dakika bellekte tutulur, veritabanı sorguları azalır.
+
+Ölçüm (1000 oyuncu adada, 100'ü sürekli yürüyor): sunucu ≈1,4 GB/saat, CPU bir çekirdeğin ≈%4'ü, RAM ≈130 MB.
+Kendi ölçümün için: `node scripts/island-load.js http://localhost:3000 <previewKey> 1000 20 100`
+
 ## Gerçek tokenlara geçmeden önce
 
 Bu sürüm bir demo. Gerçek değeri olan token ve NFT'lere geçmeden önce:

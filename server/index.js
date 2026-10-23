@@ -66,7 +66,26 @@ if (COMING_SOON) {
     res.sendFile(path.join(__dirname, '..', 'public', 'coming-soon.html'));
   });
 }
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// Text files (scripts, styles, pages) are gzipped once at startup and served with an ETag, so each visit
+// downloads about a quarter of the bytes and repeat visits only get a tiny "not modified" reply.
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const PACKED = new Map();
+for (const f of require('fs').readdirSync(PUBLIC_DIR)) {
+  if (!/\.(js|css|html|svg|json|txt)$/i.test(f)) continue;
+  const raw = require('fs').readFileSync(path.join(PUBLIC_DIR, f));
+  PACKED.set('/' + f, { raw, gz: require('zlib').gzipSync(raw, { level: 9 }), etag: '"' + crypto.createHash('sha1').update(raw).digest('base64url').slice(0, 16) + '"', ext: path.extname(f) });
+}
+PACKED.set('/', PACKED.get('/index.html'));
+app.use((req, res, next) => {
+  const f = (req.method === 'GET' || req.method === 'HEAD') && PACKED.get(req.path);
+  if (!f) return next();
+  res.type(f.ext); res.setHeader('ETag', f.etag); res.setHeader('Cache-Control', 'no-cache'); res.setHeader('Vary', 'Accept-Encoding');
+  if (req.headers['if-none-match'] === f.etag) return res.status(304).end();
+  const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+  if (gz) res.setHeader('Content-Encoding', 'gzip');
+  res.send(gz ? f.gz : f.raw);
+});
+app.use(express.static(PUBLIC_DIR));
 
 const now = () => Date.now();
 const randomTokenNo = () => crypto.randomInt(1000, 10000);
@@ -142,10 +161,22 @@ async function validateDeck(userId, roomId, uids) {
   return { room, cards };
 }
 
+// Session lookups are cached in memory for a few minutes so most requests skip one database query
+// (fewer queries keep the database small and cheap). Sign-out removes the entry right away.
+const SESSION_CACHE_MS = 5 * 60 * 1000;
+const sessionCache = new Map(); // token -> { userId, expiresAt, until }
 async function sessionUser(token) {
   if (!token) return null;
-  const row = await db.one('SELECT user_id FROM sessions WHERE token = $1 AND expires_at > $2', [String(token), now()]);
-  return row ? q.userById(row.user_id) : null;
+  token = String(token);
+  let hit = sessionCache.get(token);
+  if (!hit || hit.until < now() || hit.expiresAt < now()) {
+    const row = await db.one('SELECT user_id, expires_at FROM sessions WHERE token = $1 AND expires_at > $2', [token, now()]);
+    if (!row) { sessionCache.delete(token); return null; }
+    hit = { userId: row.user_id, expiresAt: Number(row.expires_at), until: now() + SESSION_CACHE_MS };
+    if (sessionCache.size > 20000) sessionCache.clear(); // simple bound on memory
+    sessionCache.set(token, hit);
+  }
+  return q.userById(hit.userId);
 }
 const auth = route(async (req, res, next) => {
   const token = (req.headers.authorization || '').replace(/^Bearer /, '');
@@ -198,6 +229,7 @@ app.post('/api/login', route(async (req, res) => {
 
 app.post('/api/logout', auth, route(async (req, res) => {
   await db.query('DELETE FROM sessions WHERE token = $1', [req.token]);
+  sessionCache.delete(req.token);
   res.json({ ok: true });
 }));
 
@@ -335,9 +367,9 @@ const listingView = (r, me) => ({
 const LISTING_SQL = `SELECT l.*, u.nickname AS seller_name, c.token_no FROM listings l
                      JOIN users u ON u.id = l.seller_id JOIN cards c ON c.uid = l.card_uid`;
 async function marketBroadcast(kind, listingId, extra) {
-  // everyone with the game open gets the change live
+  // everyone on the Market screen gets the change live
   const row = await db.one(`${LISTING_SQL} WHERE l.id = $1`, [listingId]);
-  io.emit('market:update', { kind, listing: row && listingView(row, null), ...extra });
+  io.to('w:market').emit('market:update', { kind, listing: row && listingView(row, null), ...extra }); // only players looking at the Market
 }
 
 app.get('/api/market', auth, route(async (req, res) => {
@@ -490,7 +522,17 @@ io.use((socket, next) => {
 const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf });
 const seasons = createSeasons({ db, G, io });
 const island = createIsland({ io, q, G });
-io.on('connection', socket => { matchmaker.onConnection(socket); island.onConnection(socket); });
+// Live feeds are only sent to players looking at the screen that shows them.
+const WATCH = { lobby: 'w:lobby', market: 'w:market' };
+io.on('connection', socket => {
+  matchmaker.onConnection(socket); island.onConnection(socket);
+  socket.on('watch', (what, fn) => {
+    for (const r of Object.values(WATCH)) socket.leave(r);
+    if (WATCH[what]) socket.join(WATCH[what]);
+    if (what === 'lobby') socket.emit('lobby', matchmaker.lobbySnapshot());
+    if (typeof fn === 'function') fn({ ok: true });
+  });
+});
 
 setInterval(() => {
   db.query('DELETE FROM sessions WHERE expires_at < $1', [now()]).catch(() => {});

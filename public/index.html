@@ -68,7 +68,7 @@
     <div class="island-view" id="islandView"></div>
     <div class="hud hud-tl">
       <div class="hud-chip hud-me"><b id="hudNick"></b><span id="hudTier"></span></div>
-      <span class="hud-chip hud-live" id="islandOnline">● 1 ONLINE</span>
+      <button class="hud-btn hud-live" type="button" id="islandOnline" aria-expanded="false" aria-controls="chanMenu" title="Switch island channel">● ISLAND #1 · 1</button>
     </div>
     <div class="hud hud-tr">
       <div class="hud-chip hud-coin"><i aria-hidden="true"></i><b class="num" id="hudBal">0</b></div>
@@ -76,6 +76,7 @@
       <button class="hud-btn" type="button" id="islandMenu" aria-expanded="false" aria-controls="islandQuick">MENU</button>
     </div>
     <div class="hud-menu" id="islandQuick" hidden></div>
+    <div class="hud-menu hud-menu-left" id="chanMenu" hidden></div>
     <p class="hud-hint" id="islandHint">Tap to walk · walk into a building to enter</p>
     <div class="hud hud-bottom emotes" id="emotes" aria-label="Quick reactions">
       <button type="button" data-e="hi">HI!</button><button type="button" data-e="gg">GG</button><button type="button" data-e="wow">WOW</button>

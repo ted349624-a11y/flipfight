@@ -22,6 +22,7 @@ const me = t => call('/api/me', null, t);
 
 (async () => {
   const [s, b1, b2] = await Promise.all([player('Seller'), player('BuyerA'), player('BuyerB')]);
+  await Promise.all([s, b1, b2].map(p => new Promise(ok => p.socket.emit('watch', 'market', ok)))); // like a player looking at the Market screen
   [s, b1, b2].forEach(p => { p.socket.on('market:update', u => p.events.push(u.kind)); p.socket.on('market:sold', d => p.events.push('sold-notice:' + d.received)); });
   const sm = await me(s.token);
   const card = sm.cards.find(c => c.rar === 'epic');

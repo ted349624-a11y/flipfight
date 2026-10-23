@@ -498,7 +498,12 @@ body.on-island{overflow:hidden}
   box-shadow:0 0 0 2px #1a1426,inset 0 0 0 2px rgba(255,255,255,.08),0 4px 0 2px rgba(0,0,0,.35);padding:9px 11px;display:flex;gap:8px;align-items:center}
 .hud-me b{color:var(--gold)}
 .hud-me span{font-size:9px}
-.hud-live{color:var(--good);font-size:9px;padding:7px 9px}
+.hud-live{color:var(--good)!important;font-size:9px!important;padding:8px 9px!important}
+.hud-menu-left{left:10px;right:auto;top:calc(86px + env(safe-area-inset-top,0px))}
+.hud-menu .chan[aria-current=true]{color:var(--gold);box-shadow:inset 0 0 0 2px var(--gold)}
+.hud-menu .chan span{float:right;color:var(--muted);margin-left:12px}
+.hud-menu .chan:disabled{opacity:.45;cursor:not-allowed}
+.hud-menu p{margin:0;font-family:var(--font-px);font-size:8px;color:var(--muted);line-height:1.6}
 .hud-coin i{width:12px;height:12px;background:var(--gold);box-shadow:inset -2px -2px 0 var(--gold-d),inset 2px 2px 0 #fff3c4,0 0 0 2px #1a1426}
 .hud-coin b{color:var(--gold)}
 .hud-btn{all:unset;pointer-events:auto;font-family:var(--font-px);font-size:10px;line-height:1;color:var(--fg);background:rgba(26,20,38,.82);cursor:pointer;
