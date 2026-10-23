@@ -190,7 +190,10 @@ const CLAN = {
   colors: ['#e0484e', '#ff8a3a', '#ffcc33', '#5fd38d', '#4fd3d3', '#4f8dff', '#8a5cf6', '#ff6bd6', '#f3ecd6', '#2a2238'],
   symbols: ['sword', 'shield', 'crown', 'flame', 'wave', 'leaf', 'skull', 'star', 'moon', 'bolt', 'heart', 'eye'],
   patterns: ['plain', 'stripe', 'split', 'chevron'],
-  joinModes: ['open', 'approval'],
+  joinModes: ['open', 'approval', 'invite'],
+  // the official clan of the game's founder: created automatically, invite-only, with a one-of-a-kind royal banner
+  official: { name: 'Flipfight', tag: 'FF', banner: { special: 'flipfight' } },
+  reservedTags: ['FF', 'FLIP', 'DEV', 'MOD'],
 };
 function clanBannerOk(b) {
   return !!b && Number.isInteger(b.bg) && Number.isInteger(b.fg) && Number.isInteger(b.sym) && Number.isInteger(b.pat) &&

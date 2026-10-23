@@ -627,7 +627,42 @@ const CLAN_SYMBOLS = {
 const SYMBOL_IDS = Object.keys(CLAN_SYMBOLS);
 const bannerCache = new Map();
 // 12x14 pixel flag on a pole. b = { bg, fg, sym, pat } (palette / symbol / pattern indexes)
+// The Flipfight clan's royal banner: gold pole and orb, deep purple velvet with a gold border, a ruby crown
+// above a rising phoenix, and a three-tailed hem. Small (12x14, next to names) and large (24x28, panels and the plaza).
+const ROYAL_SMALL = [ // 14 x 16: W orb, Y pole, O outline, G gold, P velvet, D velvet shade, R ruby, S shine
+  'WW............',
+  'YYOOOOOOOOOOOO',
+  'YYOGGGGGGGGGGO',
+  'YYOGPPPPPPPPGO',
+  'YYOGPGPGGPGPGO',
+  'YYOGPGPGGPGPGO',
+  'YYOGPGGGGGGPGO',
+  'YYOGPRGRRGRPGO',
+  'YYOGPGGGGGGPGO',
+  'YYOGPPPPPPPPGO',
+  'YYOGPDPGGPDPGO',
+  'YYOGPPGSSGPPGO',
+  'YYOGPDPGGPDPGO',
+  'YYOGGGGGGGGGGO',
+  'YYOGGOOGGOOGGO',
+  'YY.OO..OO..OO.',
+];
+const ROYAL_COLS = { W: '#fff3c4', Y: '#d9a21c', O: OUT, G: '#ffcc33', P: '#5a2db0', D: '#43208a', R: '#ff3355', S: '#fff3c4' };
+function royalBanner(big) {
+  const k = big ? 2 : 1, cv = canvas(14 * k, 16 * k), c = cv.getContext('2d');
+  ROYAL_SMALL.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') px(c, ROYAL_COLS[ch], x * k, y * k, k, k); }));
+  if (big) { // extra detail at full size
+    for (let y = 2; y < 30; y += 3) px(c, '#fff3c4', 0, y, 1, 1);                                    // pole shine
+    for (let y = 18; y < 26; y++) { px(c, '#43208a', 11, y, 1, 1); px(c, '#6b3fd6', 20, y, 1, 1); }  // velvet folds
+    [[8, 6], [23, 6], [8, 25], [23, 25]].forEach(([x, y]) => px(c, '#ffe28a', x, y, 1, 1));         // gold studs
+    [[10, 14], [14, 14], [16, 14], [20, 14]].forEach(([x, y]) => px(c, '#ffd6de', x, y, 1, 1));       // ruby glints
+    [[10, 8], [14, 8], [16, 8], [20, 8]].forEach(([x, y]) => px(c, '#fff3c4', x, y, 1, 1));          // crown tips
+    [[7, 30], [15, 30], [23, 30]].forEach(([x, y]) => px(c, '#ffcc33', x, y, 2, 2));                 // tassels
+  }
+  return cv;
+}
 function bannerSprite(b) {
+  if (b && b.special === 'flipfight') { if (!bannerCache.has('royal')) bannerCache.set('royal', royalBanner(false)); return bannerCache.get('royal'); }
   const key = `${b.bg}.${b.fg}.${b.sym}.${b.pat}`;
   if (bannerCache.has(key)) return bannerCache.get(key);
   const cv = canvas(12, 14), c = cv.getContext('2d');
@@ -648,15 +683,22 @@ function bannerSprite(b) {
   bannerCache.set(key, cv);
   return cv;
 }
-const clanFrom = row => (Array.isArray(row) ? { tag: row[0], banner: { bg: row[1], fg: row[2], sym: row[3], pat: row[4] } } : null);
+const clanFrom = row => (Array.isArray(row) ? { tag: row[0], banner: row[5] ? { special: row[5] } : { bg: row[1], fg: row[2], sym: row[3], pat: row[4] } } : null);
+// large version for panels and the plaza flagpole (normal banners are simply scaled up)
+function bannerBig(b) {
+  if (b && b.special === 'flipfight') { if (!bannerCache.has('royal-big')) bannerCache.set('royal-big', royalBanner(true)); return bannerCache.get('royal-big'); }
+  return bannerSprite(b);
+}
 // the season's top clan flies its banner on a tall pole at the plaza
 const FLAGPOLE = { x: (PLAZA_C.x - 4) * T + 6, y: (PLAZA_C.y - 2) * T + 12 };
 function drawFlagpole(c, t, top) {
   const { x, y } = FLAGPOLE;
   px(c, 'rgba(10,8,30,.4)', x - 4, y - 1, 12, 3);
   px(c, OUT, x - 1, y - 58, 4, 59); px(c, '#cfc6b0', x, y - 57, 2, 57); px(c, '#ffcc33', x - 1, y - 61, 4, 3);
-  const img = bannerSprite(top ? top.banner : { bg: 6, fg: 2, sym: 7, pat: 0 }); // no leader yet: the Flipfight star
+  const b = top ? top.banner : { bg: 6, fg: 2, sym: 7, pat: 0 }; // no leader yet: the Flipfight star
   // a waving flag: draw the cloth column by column with a little sine offset
+  if (b.special) { const img = bannerBig(b); for (let col = 4; col < 28; col++) c.drawImage(img, col, 0, 1, 32, x + 2 + (col - 4), y - 58 + Math.round(Math.sin(t * 3 + col * .3) * 1.5 * (col / 28)) * 2, 1, 32); return; }
+  const img = bannerSprite(b);
   for (let col = 2; col < 12; col++) c.drawImage(img, col, 0, 1, 14, x + 2 + (col - 2) * 2, y - 56 + Math.round(Math.sin(t * 3 + col * .6) * 1.5 * (col / 12)) * 2, 2, 28);
 }
 
@@ -794,6 +836,7 @@ function renderWorld(now, V) {
     glow(x, y, l.r * fl, l.c, .75);
   }
   if (V.glowAt) glow(V.glowAt.x - cx, V.glowAt.y - cy - 8, 40, [180, 170, 220], .35); // a little light around you
+  glow(FLAGPOLE.x + 14 - cx, FLAGPOLE.y - 44 - cy, 36, V.topClan && V.topClan.banner.special ? [255, 215, 130] : [220, 210, 255], .55); // the plaza flag is lit
   if (I.boss && !I.boss.killedAt && BOSS_SPOT.door) glow(BOSS_SPOT.x + 60 - cx, BOSS_SPOT.y + 24 - cy, 70 + Math.sin(t * 2) * 8, [255, 90, 90], .5); // the boss's glare
   for (const p of chars) if (p.founder) glow(p.x - cx, p.y - cy - 10, 34 + Math.sin(t * 2.4) * 4, [255, 200, 90], .55); // royal aura
   if (!reduced) flies.forEach(f => { const x = f.x - cx, y = f.y - cy; if (Math.sin(f.ph * 2) > 0) glow(x, y, 7, [200, 255, 120], .5); });
@@ -854,7 +897,11 @@ function render(now) {
   for (const p of chars) {
     const name = p.nick, nw = Math.round(c.measureText(name).width);
     const nx = Math.round(p.x), ny = Math.round(p.y) - 26;
-    if (p.clan) c.drawImage(bannerSprite(p.clan.banner), nx - Math.round(nw / 2) - (p.founder ? 26 : 18), ny - 12); // clan flag next to the name
+    if (p.clan) {
+      const royal = !!p.clan.banner.special, fx = nx - Math.round(nw / 2) - (p.founder ? 26 : 18) - (royal ? 3 : 0);
+      c.drawImage(bannerSprite(p.clan.banner), fx, ny - (royal ? 14 : 12)); // clan flag next to the name
+      if (p.clan.banner.special && !reduced && Math.sin(now / 260 + p.x) > .6) px(c, '#fff3c4', fx + 4 + Math.round((now / 90) % 6), ny - 9 + Math.round((now / 130) % 7), 1, 1); // royal glint
+    }
     if (p.founder) { // royal name plate with stars
       const w = nw + 22;
       px(c, OUT, nx - w / 2 - 1, ny - 11, w + 2, 15); px(c, '#7a1428', nx - w / 2, ny - 10, w, 13); px(c, '#ffcc33', nx - w / 2, ny + 2, w, 1); px(c, '#ffcc33', nx - w / 2, ny - 10, w, 1);
@@ -1080,7 +1127,7 @@ window.Island = {
   setTopClan(cl) { I.topClan = cl || null; },
   setBoss(st) { I.boss = st || null; },
   bossSprite,
-  bannerSprite, symbols: SYMBOL_IDS,
+  bannerSprite, bannerBig, symbols: SYMBOL_IDS,
   channels(cb) { if (I.socket) I.socket.emit('island:channels', r => cb(r && r.ok ? r : null)); else cb(null); },
   switchChannel(n) { if (I.mounted && n !== I.channel) { I.others.clear(); enterChannel(n); } },
   state: () => ({ channel: I.channel, me: I.me && { x: Math.round(I.me.x), y: Math.round(I.me.y), dir: I.me.dir }, others: [...I.others.values()].map(o => ({ nick: o.nick, x: Math.round(o.tx), y: Math.round(o.ty), emote: o.emoteUntil > performance.now() ? o.emote : '' })), path: I.path.length, scale: I.scale, view: [I.vw, I.vh] }),

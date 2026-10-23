@@ -244,6 +244,7 @@ app.post('/api/login', route(async (req, res) => {
       try { await db.query('UPDATE users SET nickname = $1 WHERE id = $2', [FOUNDER_NICK, user.id]); user = await q.userById(user.id); }
       catch (e) { if (e.code === '23505') console.warn(`FOUNDER_NICK "${FOUNDER_NICK}" is already used by another player.`); else throw e; }
     }
+    if (user.nickname) await clans.ensureOfficial(user.id).catch(e => console.error('official clan', e));
   }
   const token = crypto.randomBytes(32).toString('hex');
   await db.query('INSERT INTO sessions(token, user_id, expires_at) VALUES($1,$2,$3)', [token, user.id, now() + SESSION_MS]);
@@ -282,6 +283,7 @@ app.post('/api/nickname', auth, route(async (req, res) => {
     if (e.code === '23505') return fail(res, 409, 'That nickname is taken. Try another one.');
     throw e;
   }
+  if (isFounder(req.user)) await clans.ensureOfficial(req.user.id).catch(e => console.error('official clan', e));
   res.json({ profile: publicProfile(await q.userById(req.user.id)) });
 }));
 
@@ -551,7 +553,7 @@ const seasons = createSeasons({ db, G, io, onReset: clans.seasonReset, afterRese
 boss = createBoss({ db, G, io, seasons, clanOf: clans.clanOf });
 const island = createIsland({ io, q, G, isFounderId: id => founderIds.has(id), clanOf: clans.clanOf, topClan: clans.topClan, bossState: () => boss.state() });
 boss.register(app, { auth, route });
-clans.register(app, { auth, route, fail });
+clans.register(app, { auth, route, fail, notify: (uid, ev, data) => matchmaker.notify(uid, ev, data) });
 // Live feeds are only sent to players looking at the screen that shows them.
 const WATCH = { lobby: 'w:lobby', market: 'w:market', boss: 'w:boss' };
 io.on('connection', socket => {
@@ -572,7 +574,13 @@ setInterval(() => {
 
 db.init()
   .then(() => clans.load())
-  .then(async () => { if (FOUNDERS.size) for (const r of await db.all('SELECT id FROM users WHERE address = ANY($1::text[])', [[...FOUNDERS]])) founderIds.add(r.id); })
+  .then(async () => {
+    if (!FOUNDERS.size) return;
+    for (const r of await db.all('SELECT id, nickname FROM users WHERE address = ANY($1::text[])', [[...FOUNDERS]])) {
+      founderIds.add(r.id);
+      if (r.nickname) await clans.ensureOfficial(r.id).catch(e => console.error('official clan', e));
+    }
+  })
   .then(() => seasons.start())
   .then(() => boss.load())
   .then(() => server.listen(PORT, () => console.log(`Flipfight running on http://localhost:${PORT}`)))

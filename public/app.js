@@ -165,12 +165,12 @@ function trophies(badges) {
 
 // clan banner next to a nickname
 const bannerURLs = new Map();
-function bannerURL(b) {
-  const k = `${b.bg}.${b.fg}.${b.sym}.${b.pat}`;
-  if (!bannerURLs.has(k)) bannerURLs.set(k, Island.bannerSprite(b).toDataURL());
+function bannerURL(b, big) {
+  const k = (b.special ? 'S:' + b.special : `${b.bg}.${b.fg}.${b.sym}.${b.pat}`) + (big ? ':big' : '');
+  if (!bannerURLs.has(k)) bannerURLs.set(k, (big ? Island.bannerBig(b) : Island.bannerSprite(b)).toDataURL());
   return bannerURLs.get(k);
 }
-const clanFlag = cl => (cl && cl.banner ? `<img class="cflag" src="${bannerURL(cl.banner)}" alt="" title="[${esc(cl.tag)}] ${esc(cl.name || '')}"><span class="ctag">${esc(cl.tag)}</span>` : '');
+const clanFlag = cl => (cl && cl.banner ? `<img class="cflag${cl.banner.special ? ' royal' : ''}" src="${bannerURL(cl.banner)}" alt="" title="[${esc(cl.tag)}] ${esc(cl.name || '')}"><span class="ctag${cl.banner.special ? ' royal' : ''}">${esc(cl.tag)}</span>` : '');
 function backEl() { const d = document.createElement('div'); d.className = 'back bigback'; return d; }
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
@@ -447,6 +447,7 @@ function connectSocket() {
   s.on('match:state', onMatchState);
   s.on('match:end', onMatchEnd);
   s.on('market:update', onMarketUpdate);
+  s.on('clan:invite', d => { toast(`${d.from} invited you to join [${d.clan.tag}] ${d.clan.name}. Open Clans to answer.`); SFX.found(); if (current === 'clans') renderClans(); });
   s.on('boss:update', st => { Island.setBoss(st); if (BS.data) { BS.data.boss = st; if (current === 'boss') drawBossHero(); } });
   s.on('season:ended', d => { toast(`Season ${d.season} is over. Season ${d.next} has started!`); refreshMe().then(() => { if (current === 'ranks') renderRanks(); }).catch(() => {}); });
   s.on('market:sold', d => {
@@ -1286,7 +1287,8 @@ async function renderRanks() {
 }
 
 // ---------- clans ----------
-const CL = { list: [], open: null, editor: null, confirm: null, q: '' };
+const CL = { list: [], open: null, editor: null, confirm: null, q: '', invites: [] };
+const modeName = m => (m === 'open' ? 'open' : m === 'invite' ? 'invite only' : 'by approval');
 const clanApi = (path, body) => api('/api/clan/' + path, body);
 async function renderClans() {
   show('clans');
@@ -1297,25 +1299,40 @@ async function renderClans() {
   try {
     await refreshMe();
     const r = await api('/api/clans' + (CL.q ? '?q=' + encodeURIComponent(CL.q) : ''));
-    CL.list = r.clans;
+    CL.list = r.clans; CL.invites = r.invites || [];
+    drawInvites();
     if (S.me.clan && !CL.open) CL.open = S.me.clan.id;
     drawClanList();
     if (CL.open) await openClan(CL.open); else $('clanView').innerHTML = '';
   } catch (e) { $('clanList').innerHTML = `<p class="emptystate">${esc(e.message)}</p>`; }
   $('clanFound').hidden = !!S.me.clan;
 }
+function drawInvites() {
+  const box = $('clanInvites');
+  box.hidden = !CL.invites.length || !!S.me.clan;
+  box.innerHTML = '<b>YOU\'RE INVITED</b>' + CL.invites.map(c => `<div class="inv-row"><img class="bn${c.banner.special ? ' royal' : ''}" src="${bannerURL(c.banner, true)}" alt="">
+    <span><span class="ctag${c.banner.special ? ' royal' : ''}">${esc(c.tag)}</span>${esc(c.name)} <small class="num">${c.members}/${S.cfg.clan.maxMembers} members</small></span>
+    <button class="btn" type="button" data-accept="${c.id}">Join</button><button class="btn ghost" type="button" data-decline="${c.id}">Decline</button></div>`).join('');
+}
+$('clanInvites').onclick = async e => {
+  const a = e.target.closest('[data-accept]'), d = e.target.closest('[data-decline]');
+  try {
+    if (a) { SFX.click(); await clanApi('accept-invite', { clanId: Number(a.dataset.accept) }); SFX.coin(); toast('Welcome to the clan!'); CL.open = Number(a.dataset.accept); return renderClans(); }
+    if (d) { SFX.click(); await clanApi('decline-invite', { clanId: Number(d.dataset.decline) }); return renderClans(); }
+  } catch (err) { toast(err.message); }
+};
 function drawClanList() {
   const mine = S.me.clan && S.me.clan.id;
   if (!CL.list.length) { $('clanList').innerHTML = `<p class="emptystate">${CL.q ? 'No clan matches that search.' : 'No clans yet. Found the first one!'}</p>`; return; }
   $('clanList').innerHTML = CL.list.map(c => {
     let act = '';
     if (c.id === mine) act = '<span class="ctag">YOUR CLAN</span>';
-    else if (!mine) act = c.members >= S.cfg.clan.maxMembers ? '<span class="ctag">FULL</span>'
+    else if (!mine) act = c.members >= S.cfg.clan.maxMembers ? '<span class="ctag">FULL</span>' : c.joinMode === 'invite' ? '<span class="ctag">INVITE ONLY</span>'
       : c.requested ? `<button class="btn ghost" type="button" data-cancel="${c.id}">Requested · cancel</button>`
       : `<button class="btn" type="button" data-join="${c.id}">${c.joinMode === 'open' ? 'Join' : 'Ask to join'}</button>`;
     return `<div class="clan-row${c.id === mine ? ' mine' : ''}" tabindex="0" role="button" data-open="${c.id}" aria-label="${esc(c.name)} clan">
-      <span class="rk num">#${c.rank}</span><img class="bn" src="${bannerURL(c.banner)}" alt="">
-      <span class="nm"><b><span class="ctag">${esc(c.tag)}</span>${esc(c.name)}</b><span class="num">${c.members}/${S.cfg.clan.maxMembers} members · ${c.points} pts this season · ${c.joinMode === 'open' ? 'open' : 'by approval'}</span></span>
+      <span class="rk num">#${c.rank}</span><img class="bn${c.banner.special ? ' royal' : ''}" src="${bannerURL(c.banner, true)}" alt="">
+      <span class="nm"><b><span class="ctag">${esc(c.tag)}</span>${esc(c.name)}</b><span class="num">${c.members}/${S.cfg.clan.maxMembers} members · ${c.points} pts this season · ${modeName(c.joinMode)}</span></span>
       <span class="act">${act}</span></div>`;
   }).join('');
 }
@@ -1337,19 +1354,23 @@ async function openClan(id) {
   const cl = d.clan, max = cl.max, rank = (CL.list.find(x => x.id === cl.id) || {}).rank;
   const confirmBtn = (key, label, sure, cls = '') => `<button class="btn ${cls}" type="button" data-act="${key}">${CL.confirm === key ? sure : label}</button>`;
   const actions = [];
-  if (d.isLeader) actions.push('<button class="btn ghost" type="button" data-act="edit">Edit banner & settings</button>', confirmBtn('disband', 'Disband clan', 'Click again to disband', 'ghost'));
+  if (d.isLeader) actions.push(`<button class="btn ghost" type="button" data-act="edit">${cl.banner.special ? 'Clan settings' : 'Edit banner & settings'}</button>`, confirmBtn('disband', 'Disband clan', 'Click again to disband', 'ghost'));
   else if (d.isMember) actions.push(confirmBtn('leave', 'Leave clan', 'Click again to leave', 'ghost'));
-  else if (!S.me.clan) actions.push(d.requested ? `<button class="btn ghost" type="button" data-act="cancel">Requested · cancel</button>`
-    : cl.members >= max ? '<span class="ctag">THIS CLAN IS FULL</span>' : `<button class="btn" type="button" data-act="join">${cl.joinMode === 'open' ? 'Join clan' : 'Ask to join'}</button>`);
+  else if (!S.me.clan) actions.push(d.invited ? `<button class="btn" type="button" data-act="accept">Accept invitation</button><button class="btn ghost" type="button" data-act="decline">Decline</button>`
+    : d.requested ? `<button class="btn ghost" type="button" data-act="cancel">Requested · cancel</button>`
+    : cl.members >= max ? '<span class="ctag">THIS CLAN IS FULL</span>' : cl.joinMode === 'invite' ? '<span class="ctag">INVITE ONLY</span>'
+    : `<button class="btn" type="button" data-act="join">${cl.joinMode === 'open' ? 'Join clan' : 'Ask to join'}</button>`);
   if (!d.isMember) actions.push('<button class="btn ghost" type="button" data-act="close">Close</button>');
   const memberRow = m => `<tr><td>${tierBadge(m.elo, true)} ${esc(m.nickname)}${m.leader ? '<span class="lead">♛ LEADER</span>' : ''}${m.id === S.me.id ? ' (you)' : ''}</td>
     <td class="r num">${m.elo}</td><td class="r num">${m.seasonWins}</td>
     <td class="r">${d.isLeader && !m.leader ? `<button type="button" data-lead="${m.id}">${CL.confirm === 'lead' + m.id ? 'SURE?' : 'MAKE LEADER'}</button><button type="button" class="danger" data-kick="${m.id}">${CL.confirm === 'kick' + m.id ? 'SURE?' : 'KICK'}</button>` : ''}</td></tr>`;
   $('clanView').innerHTML = `<div class="frame clan-panel">
-      <img class="big" src="${bannerURL(cl.banner)}" alt="${esc(cl.name)} banner">
-      <div><h3><span class="ctag">${esc(cl.tag)}</span>${esc(cl.name)}<em>${cl.joinMode === 'open' ? 'OPEN' : 'BY APPROVAL'}</em></h3>
+      <img class="big${cl.banner.special ? ' royal' : ''}" src="${bannerURL(cl.banner, true)}" alt="${esc(cl.name)} banner">
+      <div><h3><span class="ctag${cl.banner.special ? ' royal' : ''}">${esc(cl.tag)}</span>${esc(cl.name)}<em>${modeName(cl.joinMode).toUpperCase()}</em></h3>${cl.banner.special ? '<p class="royal-note">♛ Official clan of Flipfight · royal banner, one of a kind</p>' : ''}
         <div class="clan-stats"><span><b class="num">${cl.members}/${max}</b> members</span><span><b class="num">${cl.points}</b> season points</span>${rank ? `<span>rank <b class="num">#${rank}</b></span>` : ''}</div>
         <div class="clan-actions">${actions.join('')}</div></div>
+      ${d.isLeader ? `<div class="clan-members clan-invite"><h3>INVITE A PLAYER</h3><form id="inviteForm" class="row"><input id="inviteNick" autocomplete="off" spellcheck="false" placeholder="Nickname" maxlength="16"><button class="btn" type="submit">Send invite</button></form>
+        ${d.invites.length ? `<table><tbody>${d.invites.map(r => `<tr><td>${tierBadge(r.elo, true)} ${esc(r.nickname)} <span class="ctag">INVITED</span></td><td class="r"><button type="button" class="danger" data-uninvite="${r.id}">CANCEL</button></td></tr>`).join('')}</tbody></table>` : ''}</div>` : ''}
       ${d.requests.length ? `<div class="clan-members"><h3>JOIN REQUESTS</h3><table><tbody>${d.requests.map(r => `<tr><td>${tierBadge(r.elo, true)} ${esc(r.nickname)}</td><td class="r num">${r.elo}</td>
         <td class="r"><button type="button" data-approve="${r.id}">APPROVE</button><button type="button" class="danger" data-reject="${r.id}">REJECT</button></td></tr>`).join('')}</tbody></table></div>` : ''}
       <div class="clan-members"><h3>MEMBERS</h3><table><thead><tr><th>Player</th><th class="r">ELO</th><th class="r">Season wins</th><th></th></tr></thead>
@@ -1366,6 +1387,9 @@ $('clanView').onclick = async e => {
   try {
     if (act === 'edit') return openClanEditor(d.clan);
     if (act === 'close') { CL.open = null; $('clanView').innerHTML = ''; return; }
+    if (act === 'accept') { await clanApi('accept-invite', { clanId: id }); SFX.coin(); toast('Welcome to the clan!'); return renderClans(); }
+    if (act === 'decline') { await clanApi('decline-invite', { clanId: id }); return renderClans(); }
+    if (b.dataset.uninvite) { await clanApi('uninvite', { userId: Number(b.dataset.uninvite) }); return openClan(id); }
     if (act === 'join') { const r = await clanApi('join', { clanId: id }); toast(r.joined ? 'Welcome to the clan!' : 'Request sent. The leader will decide.'); return renderClans(); }
     if (act === 'cancel') { await clanApi('cancel-request', { clanId: id }); return renderClans(); }
     if (act === 'leave') { if (!twoStep('leave')) return; await clanApi('leave', {}); toast('You left the clan.'); CL.open = null; return renderClans(); }
@@ -1376,6 +1400,14 @@ $('clanView').onclick = async e => {
     if (b.dataset.reject) { await clanApi('reject', { userId: Number(b.dataset.reject) }); return openClan(id); }
   } catch (err) { toast(err.message); }
 };
+
+$('clanView').addEventListener('submit', async e => {
+  if (e.target.id !== 'inviteForm') return;
+  e.preventDefault();
+  const nick = $('inviteNick').value.trim(); if (!nick) return;
+  try { const r = await clanApi('invite', { nickname: nick }); SFX.coin(); toast(`Invitation sent to ${r.nickname}.${r.busy ? ' They are in another clan right now.' : ''}`); openClan(CL.detail.clan.id); }
+  catch (err) { toast(err.message); }
+});
 
 // banner editor: used to found a clan and (for the leader) to edit it
 function openClanEditor(existing) {
@@ -1393,12 +1425,12 @@ function drawClanEditor() {
   $('clanEditor').innerHTML = `
     ${E.edit ? '' : `<div class="fld"><label class="note" for="ceName">Clan name (3–20)</label><input type="text" id="ceName" maxlength="20" value="${esc(E.name)}" placeholder="Pixel Kings"></div>
     <div class="fld"><label class="note" for="ceTag">Tag (2–4 letters or numbers)</label><input type="text" id="ceTag" maxlength="4" value="${esc(E.tag)}" placeholder="PK" style="text-transform:uppercase;width:120px"></div>`}
-    <div class="fld"><span class="note">Banner colour</span><div class="swatches">${cols.map((_, i) => sw('bg', i)).join('')}</div></div>
+    ${b.special ? '<div class="fld"><span class="note">Banner</span><p class="royal-note">♛ This clan flies the royal Flipfight banner. It is one of a kind and can\'t be changed.</p></div>' : `<div class="fld"><span class="note">Banner colour</span><div class="swatches">${cols.map((_, i) => sw('bg', i)).join('')}</div></div>
     <div class="fld"><span class="note">Symbol colour</span><div class="swatches">${cols.map((_, i) => sw('fg', i)).join('')}</div></div>
     <div class="fld"><span class="note">Symbol</span><div class="syms">${S.cfg.clan.symbols.map((n, i) => `<button type="button" class="sym" data-sym="${i}" aria-pressed="${b.sym === i}" title="${n}"><img src="${bannerURL({ ...b, sym: i })}" alt="${n}"></button>`).join('')}</div></div>
-    <div class="fld"><span class="note">Pattern</span><div class="pats">${S.cfg.clan.patterns.map((n, i) => `<button type="button" class="pat" data-pat="${i}" aria-pressed="${b.pat === i}" title="${n}"><img src="${bannerURL({ ...b, pat: i })}" alt="${n}"></button>`).join('')}</div></div>
-    <div class="fld"><span class="note">Who can join</span><div class="modes"><button type="button" data-mode="open" aria-pressed="${E.joinMode === 'open'}">OPEN · ANYONE</button><button type="button" data-mode="approval" aria-pressed="${E.joinMode === 'approval'}">BY APPROVAL</button></div></div>
-    <div class="preview"><img src="${bannerURL(b)}" alt="Banner preview"><b><span class="ctag">${esc(E.tag.toUpperCase() || 'TAG')}</span>${esc(E.name || 'Your clan')}</b><span class="note">${clanFlag({ tag: E.tag.toUpperCase() || 'TAG', name: E.name, banner: b })}${esc(S.me.nickname)}</span></div>
+    <div class="fld"><span class="note">Pattern</span><div class="pats">${S.cfg.clan.patterns.map((n, i) => `<button type="button" class="pat" data-pat="${i}" aria-pressed="${b.pat === i}" title="${n}"><img src="${bannerURL({ ...b, pat: i })}" alt="${n}"></button>`).join('')}</div></div>`}
+    <div class="fld"><span class="note">Who can join</span><div class="modes"><button type="button" data-mode="open" aria-pressed="${E.joinMode === 'open'}">OPEN · ANYONE</button><button type="button" data-mode="approval" aria-pressed="${E.joinMode === 'approval'}">BY APPROVAL</button><button type="button" data-mode="invite" aria-pressed="${E.joinMode === 'invite'}">INVITE ONLY</button></div></div>
+    <div class="preview"><img class="${b.special ? 'royal' : ''}" src="${bannerURL(b, true)}" alt="Banner preview"><b><span class="ctag">${esc(E.tag.toUpperCase() || 'TAG')}</span>${esc(E.name || 'Your clan')}</b><span class="note">${clanFlag({ tag: E.tag.toUpperCase() || 'TAG', name: E.name, banner: b })}${esc(S.me.nickname)}</span></div>
     <div class="foot"><button class="btn" type="button" id="ceSave">${E.edit ? 'Save changes' : `Found clan · ${fmt(S.cfg.clan.createCost)} FLIP`}</button><button class="btn ghost" type="button" id="ceCancel">Cancel</button><p class="err" id="ceErr" role="alert"></p></div>`;
 }
 $('clanEditor').oninput = e => {
@@ -1415,7 +1447,7 @@ $('clanEditor').onclick = async e => {
   if (t.id === 'ceSave') {
     t.disabled = true; $('ceErr').textContent = '';
     try {
-      if (E.edit) { await clanApi('update', { banner: E.banner, joinMode: E.joinMode }); toast('Clan updated.'); }
+      if (E.edit) { await clanApi('update', E.banner.special ? { joinMode: E.joinMode } : { banner: E.banner, joinMode: E.joinMode }); toast('Clan updated.'); }
       else { const r = await clanApi('create', { name: E.name, tag: E.tag, banner: E.banner, joinMode: E.joinMode }); CL.open = r.clanId; SFX.legend(); toast(`[${E.tag}] ${E.name} is founded!`); }
       $('clanEditor').hidden = true; CL.editor = null; renderClans();
     } catch (err) { $('ceErr').textContent = err.message; t.disabled = false; }

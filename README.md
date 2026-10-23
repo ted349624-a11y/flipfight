@@ -142,6 +142,8 @@ Render → Environment kısmına ekle:
 - `FOUNDER_ADDRESSES` = cüzdan adresin (birden fazlaysa virgülle ayır)
 - `FOUNDER_NICK` = istediğin nick (isteğe bağlı, 3–16 harf/rakam/alt çizgi)
 
+Kurucu cüzdanı ilk kez nick'iyle bağlandığında (ya da sunucu açılışında) resmi **Flipfight [FF]** klanı ücretsiz kurulur: lideri kurucudur, sadece davetle girilir ve yalnızca bu klana özel, değiştirilemeyen kraliyet sancağını taşır (altın direk ve küre, mor kadife, yakutlu taç, üç uçlu püsküllü etek). Lider, Klan ekranından nick yazarak davet gönderir; davet edilen oyuncuya anında bildirim gider ve Klanlar ekranından kabul eder. Davetle giriş modu diğer klanlara da açık. "FF", "FLIP" gibi etiketler ve içinde "flipfight" geçen klan adları rezervedir.
+
 Bu cüzdan bağlanınca: taçlı, pelerinli kraliyet karakteri, etrafında altın parıltılar, adada kırmızı-altın isim plakası ve her yerde ★ FOUNDER rozeti. `FOUNDER_NICK` girildiyse hesabın nicki girişte otomatik o olur ve bu isim başkasına kapanır. "admin", "dev", "founder", içinde "flipfight" geçen isimler gibi resmi görünen nickler de sadece kurucuya açık.
 
 ## Ölçek ve trafik

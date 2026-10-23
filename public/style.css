@@ -686,3 +686,21 @@ nav.tabs button.tab-boss{color:#ff5d6c}
 .ante-pick button:focus-visible{outline:3px dashed var(--wind);outline-offset:3px}
 .ante-pick button i{width:10px;height:10px;display:inline-block}
 .ante-pick .note{margin:0}
+
+/* clan invitations and the royal banner */
+.clan-invites{padding:14px 16px;display:flex;flex-direction:column;gap:10px;--b:var(--gold)}
+.clan-invites>b{font-family:var(--font-px);font-size:10px;color:var(--gold);font-weight:400}
+.inv-row{display:grid;grid-template-columns:36px 1fr auto auto;gap:10px;align-items:center;font-size:20px}
+.inv-row .bn{width:36px;height:42px;image-rendering:pixelated}
+.inv-row small{color:var(--muted);font-size:16px}
+.inv-row .btn{font-size:9px;padding:9px 10px}
+.clan-invite form{gap:8px}
+.clan-invite input{font:inherit;font-size:19px;color:var(--fg);background:var(--bg2);border:0;padding:8px 10px;box-shadow:inset 0 0 0 3px var(--line);width:min(240px,100%)}
+.clan-invite input:focus{outline:none;box-shadow:inset 0 0 0 3px var(--gold)}
+.clan-invite form .btn{font-size:9px;padding:9px 10px}
+.ctag.royal{color:var(--gold)}
+img.royal{filter:drop-shadow(0 0 6px rgba(255,204,51,.55));animation:royalGlow 3s ease-in-out infinite}
+.cflag.royal{filter:drop-shadow(0 0 3px rgba(255,204,51,.7))}
+@keyframes royalGlow{50%{filter:drop-shadow(0 0 14px rgba(255,204,51,.85)) brightness(1.08)}}
+@media (prefers-reduced-motion:reduce){img.royal{animation:none}}
+.royal-note{margin:4px 0 0;font-size:17px;color:var(--gold)}

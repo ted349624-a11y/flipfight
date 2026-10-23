@@ -34,7 +34,7 @@ function createClans({ db, G, now = () => Date.now() }) {
   const topClan = () => (top && cache.get(top) ? { ...view(cache.get(top)), points: cache.get(top).points } : null);
 
   // ---------- API ----------
-  function register(app, { auth, route, fail }) {
+  function register(app, { auth, route, fail, notify }) {
     const cleanName = n => String(n || '').trim().replace(/\s+/g, ' ');
     const err = (res, msg, code = 400) => fail(res, code, msg);
 
@@ -44,9 +44,11 @@ function createClans({ db, G, now = () => Date.now() }) {
       if (qs) list = list.filter(c => c.name.toLowerCase().includes(qs) || c.tag.toLowerCase().includes(qs));
       list.sort((a, b) => b.points - a.points || b.members - a.members || a.id - b.id);
       const reqs = (await db.all('SELECT clan_id FROM clan_requests WHERE user_id = $1', [req.user.id])).map(r => r.clan_id);
+      const invites = (await db.all('SELECT clan_id FROM clan_invites WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id])).map(r => cache.get(r.clan_id)).filter(Boolean);
       res.json({
         clans: list.slice(0, 100).map((c, i) => ({ ...view(c), rank: i + 1, points: c.points, members: c.members, joinMode: c.joinMode, requested: reqs.includes(c.id) })),
         myClanId: req.user.clan_id || null, total: cache.size, rules: { cost: C.createCost, max: C.maxMembers },
+        invites: invites.map(c => ({ ...view(c), members: c.members, points: c.points })),
       });
     }));
 
@@ -57,10 +59,12 @@ function createClans({ db, G, now = () => Date.now() }) {
       const isLeader = cl.leaderId === req.user.id;
       const requests = isLeader ? await db.all(`SELECT u.id, u.nickname, u.elo FROM clan_requests r JOIN users u ON u.id = r.user_id WHERE r.clan_id = $1 ORDER BY r.created_at`, [id]) : [];
       const requested = !!(await db.one('SELECT 1 FROM clan_requests WHERE clan_id = $1 AND user_id = $2', [id, req.user.id]));
+      const invited = !!(await db.one('SELECT 1 FROM clan_invites WHERE clan_id = $1 AND user_id = $2', [id, req.user.id]));
+      const invites = isLeader ? await db.all(`SELECT u.id, u.nickname, u.elo FROM clan_invites i JOIN users u ON u.id = i.user_id WHERE i.clan_id = $1 ORDER BY i.created_at`, [id]) : [];
       res.json({
         clan: { ...view(cl), leaderId: cl.leaderId, joinMode: cl.joinMode, points: cl.points, members: cl.members, max: C.maxMembers },
         members: members.map(m => ({ id: m.id, nickname: m.nickname, elo: m.elo, tier: G.tierOf(m.elo).id, seasonWins: m.season_wins, seasonPlayed: m.season_played, leader: m.id === cl.leaderId })),
-        requests, isLeader, isMember: req.user.clan_id === id, requested,
+        requests, invites, isLeader, isMember: req.user.clan_id === id, requested, invited,
       });
     }));
 
@@ -69,7 +73,7 @@ function createClans({ db, G, now = () => Date.now() }) {
       const joinMode = C.joinModes.includes(req.body.joinMode) ? req.body.joinMode : 'open';
       if (!/^[A-Za-z0-9 _-]{3,20}$/.test(name)) return err(res, 'Clan name: 3–20 letters, numbers, spaces, - or _.');
       if (!/^[A-Z0-9]{2,4}$/.test(tag)) return err(res, 'Clan tag: 2–4 letters or numbers.');
-      if (/flipfight|admin|official/i.test(name + ' ' + tag)) return err(res, 'That name is reserved. Try another one.');
+      if (/flipfight|admin|official/i.test(name + ' ' + tag) || C.reservedTags.includes(tag)) return err(res, 'That name or tag is reserved. Try another one.');
       if (!G.clanBannerOk(banner)) return err(res, 'Pick two different colours, a symbol and a pattern for the banner.');
       if (req.user.clan_id) return err(res, 'Leave your current clan first.');
       let id;
@@ -98,6 +102,7 @@ function createClans({ db, G, now = () => Date.now() }) {
       const id = Number(req.body.clanId), cl = cache.get(id);
       if (!cl) return err(res, 'That clan no longer exists.', 404);
       if (req.user.clan_id) return err(res, 'Leave your current clan first.');
+      if (cl.joinMode === 'invite') return err(res, 'This clan is invite-only. Ask its leader for an invitation.');
       if (cl.joinMode === 'approval') {
         await db.query('INSERT INTO clan_requests(clan_id, user_id, created_at) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', [id, req.user.id, now()]);
         return res.json({ ok: true, requested: true });
@@ -166,6 +171,7 @@ function createClans({ db, G, now = () => Date.now() }) {
     app.post('/api/clan/update', auth, route(async (req, res) => {
       const cl = leaderOf(req, res); if (!cl) return;
       const banner = req.body.banner, joinMode = req.body.joinMode;
+      if (banner !== undefined && cl.banner.special) return err(res, 'This clan\'s royal banner is one of a kind and can\'t be changed.');
       if (banner !== undefined && !G.clanBannerOk(banner)) return err(res, 'Pick two different colours, a symbol and a pattern for the banner.');
       if (joinMode !== undefined && !C.joinModes.includes(joinMode)) return err(res, 'Unknown join mode.');
       await db.query('UPDATE clans SET banner = COALESCE($1, banner), join_mode = COALESCE($2, join_mode) WHERE id = $3',
@@ -176,6 +182,42 @@ function createClans({ db, G, now = () => Date.now() }) {
       await refresh(cl.id);
       res.json({ ok: true });
     }));
+    // invitations: the leader invites a player by nickname; the player accepts or declines from the Clans screen
+    app.post('/api/clan/invite', auth, route(async (req, res) => {
+      const cl = leaderOf(req, res); if (!cl) return;
+      const nick = String(req.body.nickname || '').trim();
+      const u = nick && await db.one('SELECT id, nickname, clan_id FROM users WHERE LOWER(nickname) = LOWER($1)', [nick]);
+      if (!u) return err(res, 'No player with that nickname.');
+      if (u.clan_id === cl.id) return err(res, `${u.nickname} is already in your clan.`);
+      if (cl.members >= C.maxMembers) return err(res, `Your clan is full (${C.maxMembers} members).`);
+      await db.query('INSERT INTO clan_invites(clan_id, user_id, created_at) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', [cl.id, u.id, now()]);
+      if (notify) notify(u.id, 'clan:invite', { clan: view(cl), from: req.user.nickname });
+      res.json({ ok: true, nickname: u.nickname, busy: !!u.clan_id });
+    }));
+    app.post('/api/clan/uninvite', auth, route(async (req, res) => {
+      const cl = leaderOf(req, res); if (!cl) return;
+      await db.query('DELETE FROM clan_invites WHERE clan_id = $1 AND user_id = $2', [cl.id, Number(req.body.userId)]);
+      res.json({ ok: true });
+    }));
+    app.post('/api/clan/accept-invite', auth, route(async (req, res) => {
+      const id = Number(req.body.clanId);
+      const inv = await db.one('SELECT 1 FROM clan_invites WHERE clan_id = $1 AND user_id = $2', [id, req.user.id]);
+      if (!inv || !cache.get(id)) return err(res, 'That invitation is no longer valid.');
+      if (req.user.clan_id) return err(res, 'Leave your current clan first.');
+      const msg = await db.tx(async c => {
+        const m = await addMember(id, req.user.id, c);
+        if (!m) await db.query('DELETE FROM clan_invites WHERE user_id = $1 AND clan_id = $2', [req.user.id, id], c);
+        return m;
+      });
+      if (msg) return err(res, msg);
+      await refresh(id);
+      res.json({ ok: true });
+    }));
+    app.post('/api/clan/decline-invite', auth, route(async (req, res) => {
+      await db.query('DELETE FROM clan_invites WHERE clan_id = $1 AND user_id = $2', [Number(req.body.clanId), req.user.id]);
+      res.json({ ok: true });
+    }));
+
     app.post('/api/clan/disband', auth, route(async (req, res) => {
       const cl = leaderOf(req, res); if (!cl) return;
       await db.tx(async c => {
@@ -199,7 +241,28 @@ function createClans({ db, G, now = () => Date.now() }) {
     return null;
   }
 
-  return { load, register, clanOf, onWin, seasonReset, afterSeasonReset, topClan };
+  // The founder's official clan: made once, for free, with the unique royal banner and invite-only joining.
+  async function ensureOfficial(userId) {
+    const O = C.official;
+    const u = await db.one('SELECT id, clan_id FROM users WHERE id = $1', [userId]);
+    if (!u) return;
+    const existing = await db.one('SELECT id, leader_id FROM clans WHERE LOWER(name) = LOWER($1)', [O.name]);
+    if (existing) return; // already founded (whoever leads it now keeps it)
+    if (u.clan_id) { console.warn('Founder is already in another clan; the Flipfight clan was not created.'); return; }
+    let tag = O.tag;
+    if (await db.one('SELECT 1 FROM clans WHERE LOWER(tag) = LOWER($1)', [tag])) tag = 'FLIP';
+    const id = await db.tx(async c => {
+      const cl = await db.one(`INSERT INTO clans(name, tag, leader_id, banner, join_mode, created_at) VALUES($1,$2,$3,$4,'invite',$5) RETURNING id`,
+        [O.name, tag, userId, JSON.stringify(O.banner), now()], c);
+      await db.query('UPDATE users SET clan_id = $1 WHERE id = $2', [cl.id, userId], c);
+      await db.query('DELETE FROM clan_requests WHERE user_id = $1', [userId], c);
+      return cl.id;
+    });
+    await refresh(id);
+    console.log(`Official clan "${O.name}" [${tag}] founded for the founder.`);
+  }
+
+  return { load, register, clanOf, onWin, seasonReset, afterSeasonReset, topClan, ensureOfficial };
 }
 
 module.exports = { createClans };

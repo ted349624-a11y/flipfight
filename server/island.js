@@ -21,7 +21,7 @@ function createIsland({ io, q, isFounderId = () => false, clanOf = () => null, t
 
   const room = ch => 'island:' + ch;
   const flags = p => (p.dir & 3) | (p.moving ? 4 : 0);
-  const clanTag = p => { const c = p.clan; return c ? [c.tag, c.banner.bg, c.banner.fg, c.banner.sym, c.banner.pat] : 0; };
+  const clanTag = p => { const c = p.clan; return c ? [c.tag, c.banner.bg, c.banner.fg, c.banner.sym, c.banner.pat, c.banner.special || 0] : 0; };
   const full = p => [p.id, p.nick, p.addr, p.elo, Math.round(p.x), Math.round(p.y), flags(p), p.emote && Date.now() - p.emoteAt < 3000 ? p.emote : '', isFounderId(p.id) ? 1 : 0, clanTag(p)];
   const clampX = v => Math.max(0, Math.min(WORLD.w, Number(v) || 0));
   const clampY = v => Math.max(0, Math.min(WORLD.h, Number(v) || 0));

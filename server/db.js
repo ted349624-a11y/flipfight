@@ -113,6 +113,12 @@ CREATE TABLE IF NOT EXISTS boss_badges (
   PRIMARY KEY (season, user_id)
 );
 CREATE INDEX IF NOT EXISTS users_clan ON users(clan_id);
+CREATE TABLE IF NOT EXISTS clan_invites (
+  clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY (clan_id, user_id)
+);
 CREATE TABLE IF NOT EXISTS clan_requests (
   clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id),
