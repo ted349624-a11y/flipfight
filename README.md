@@ -84,7 +84,7 @@ node scripts/season-test.js http://localhost:3000 KEY play   # sezon maçları; 
 
 ## Giriş: X görevleri (bir kerelik)
 
-Oyun herkese açık. Yeni bir oyuncu cüzdanını bağlayıp nickname'ini seçtikten sonra **bir kez** X kullanıcı adını yazar ve 5 görevi yapar: takip et, bildirimleri aç 🔔, gönderiyi beğen, repost et, yanıt yaz. Sonra cüzdanını bağlar ve nickname seçer; görevler giriş anında hesabına kaydedilir ve bir daha sorulmaz. Kurucu hesabı bu adımı atlar.
+Siteye ilk gelen ziyaretçi, cüzdan bağlamadan **önce** bir kez X kullanıcı adını yazar ve 5 görevi yapar: takip et, bildirimleri aç 🔔, gönderiyi beğen, repost et, yanıt yaz. Sonra cüzdanını bağlar ve nickname seçer; görevler giriş anında hesabına kaydedilir ve bir daha sorulmaz. Kurucu hesabı bu adımı atlar.
 
 - `X_HANDLE`: takip edilecek hesap. Varsayılan `flipfight` (x.com/flipfight); kapatmak için `off`.
 - `X_TWEET_URL`: beğenilecek / repost edilecek / yanıtlanacak gönderinin linki (ör. `https://x.com/flipfight/status/123…`). Boşsa beğeni / repost / yanıt görevleri profili açar ve oyuncudan son gönderiyi kullanmasını ister.
