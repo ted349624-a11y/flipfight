@@ -3,7 +3,7 @@ const { createBot } = require('./bot');
 
 // Matchmaking queues and the server-authoritative match engine.
 // Live match state is kept in memory; balances, ELO and results are written to the database.
-function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
+function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf }) {
   const sockets = new Map();   // userId -> socket
   const queues = new Map(G.ROOMS.map(r => [r.id, []])); // roomId -> [{userId, cards, at}]
   const userQueue = new Map(); // userId -> roomId
@@ -120,7 +120,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
   async function startMatch(id, room, a, b) {
     const mk = async e => {
       const u = await q.userById(e.userId);
-      return { userId: u.id, nickname: u.nickname, elo: u.elo, hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
+      return { userId: u.id, nickname: u.nickname, elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
     };
     const m = { id, room, players: [await mk(a), await mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [] };
     matches.set(m.id, m);
@@ -144,9 +144,9 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
       matchId: m.id,
       room: { id: m.room.id, name: m.room.name, stake: m.room.stake, practice: !!m.practice, level: m.level || null },
       round: m.round, phase: m.phase, deadline: m.deadline, serverNow: Date.now(),
-      you: { nickname: me.nickname, elo: me.elo, hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick },
+      you: { nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick },
       opp: {
-        nickname: op.nickname, elo: op.elo, energy: op.energy, wins: op.wins, locked: op.pick !== null,
+        nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null,
         leftElements: op.hand.filter(c => !op.used.includes(c.uid)).map(c => c.el),
       },
       log: m.log.map(r => ({
@@ -243,8 +243,10 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
         await db.addStat('treasury', rake * G.ECONOMY.feeSplit.treasury, c);
         await db.addStat('season', rake * G.ECONOMY.feeSplit.season, c);
       }
-      await db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(s1)} = ${col(s1)} + 1 WHERE id = $2`, [d1, p1.userId], c);
-      await db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(1 - s1)} = ${col(1 - s1)} + 1 WHERE id = $2`, [d2, p2.userId], c);
+      const upd = (s, d, uid) => db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(s)} = ${col(s)} + 1,
+                                            season_played = season_played + 1, season_${col(s)} = season_${col(s)} + 1 WHERE id = $2`, [d, uid], c);
+      await upd(s1, d1, p1.userId);
+      await upd(1 - s1, d2, p2.userId);
       await db.query(`INSERT INTO matches(id, room_id, p1, p2, winner_id, p1_wins, p2_wins, stake, rake, p1_elo_delta, p2_elo_delta, created_at)
                       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [m.id, m.room.id, p1.userId, p2.userId, winnerIdx === null ? null : m.players[winnerIdx].userId,

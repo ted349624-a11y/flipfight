@@ -20,7 +20,7 @@
     <div class="wallet" id="walletBar" hidden>
       <button class="sfx" id="sfx" aria-pressed="true">SFX ON</button>
       <div class="stat"><b class="num" id="bal">0</b><span>FLIP</span></div>
-      <div class="stat"><b class="num" id="elo">1200</b><span>ELO</span></div>
+      <div class="stat"><b class="num" id="elo">1200</b><span id="tierTop">ELO</span></div>
       <div class="who"><b id="nick"></b><span id="addr"></span><button class="linkbtn" id="logout">Sign out</button></div>
     </div>
   </header>
@@ -224,7 +224,25 @@
 
   <!-- RANKS -->
   <section id="ranks" hidden>
-    <div class="row between"><h2>Season 1 leaderboard</h2><div class="statline" id="rankStats"></div></div>
+    <div class="frame season-head">
+      <div><span class="tier-label">WEEKLY SEASON</span><h2 id="seasonTitle">Season</h2></div>
+      <div class="countdown"><span class="num" id="seasonClock">–</span><small>UNTIL SEASON ENDS</small></div>
+    </div>
+    <div class="frame my-rank" id="myRank"></div>
+    <details class="frame howto" id="rewardBox">
+      <summary>Season rewards and rules</summary>
+      <div class="reward-grid" id="rewardGrid"></div>
+      <ul class="g-list" style="margin-top:12px">
+        <li>A season lasts <b class="gold">7 days</b>. Your ELO is your season rating; only ranked room matches count, not practice.</li>
+        <li>Play at least <b class="gold"><span id="minMatches">3</span> ranked matches</b> in the season to qualify for a reward.</li>
+        <li>Places 4–100 earn <b class="gold">800,000 ÷ place</b> FLIP, rounded down to the nearest 1,000.</li>
+        <li>The top 3 also win a <b class="gold">permanent badge</b> shown next to their name.</li>
+        <li>When the season ends, ratings move halfway back to 1200 and season records reset.</li>
+      </ul>
+      <div class="tier-row" id="tierRow"></div>
+    </details>
+    <div class="frame podium" id="podium" hidden></div>
+    <div class="row between"><h3 class="muted">LEADERBOARD</h3><div class="statline" id="rankStats"></div></div>
     <div class="frame tblwrap" id="rankWrap"></div>
   </section>
 
@@ -352,8 +370,9 @@
       </div>
 
       <div class="g-block">
-        <h3>10 · CLIMB THE LEADERBOARD</h3>
-        <p>Everyone starts at <b>1200 ELO</b>. Winning raises it and losing lowers it; beating a higher-rated player earns more. The RANKS tab lists all players by ELO for the season.</p>
+        <h3>10 · CLIMB THE WEEKLY SEASON</h3>
+        <p>Everyone starts at <b>1200 ELO</b>. Winning raises it and losing lowers it; beating a higher-rated player earns more. Your ELO sets your tier: <b>Bronze, Silver (1150), Gold (1300), Platinum (1450), Diamond (1600), Master (1800)</b>.</p>
+        <p>Each season lasts <b>7 days</b>. Play at least 3 ranked matches to qualify. The top 100 win FLIP: <b>1st 1,000,000 · 2nd 500,000 · 3rd 250,000</b>, then 800,000 ÷ place (10th 80,000, 100th 8,000). The top 3 also earn a permanent badge. At the end of a season ratings move halfway back to 1200.</p>
       </div>
 
       <div class="g-block g-tips">
@@ -372,6 +391,14 @@
 
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="modal-wrap" id="seasonModal" hidden>
+  <div class="frame modal" role="dialog" aria-modal="true" aria-labelledby="smTitle">
+    <canvas id="smArt" width="12" height="12"></canvas>
+    <h2 id="smTitle"></h2>
+    <div id="smBody"></div>
+    <button class="btn" type="button" id="smOk">Got it</button>
+  </div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.0/dist/socket.io.min.js"></script>
 <script src="/config.js"></script>
 <script src="/app.js"></script>

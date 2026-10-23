@@ -133,6 +133,20 @@ function cardEl(c, opts = {}) {
   b.setAttribute('aria-label', `${c.name}, ${elName(c.el)}, power ${c.pow}, energy ${rar(c.rar).cost}`);
   return b;
 }
+// ---------- tiers and badges ----------
+const tierOf = elo => { let t = S.cfg.tiers[0]; for (const x of S.cfg.tiers) if (elo >= x.min) t = x; return t; };
+const nextTier = elo => S.cfg.tiers.find(x => x.min > elo);
+const SHIELD = '<svg viewBox="0 0 7 8" aria-hidden="true"><path d="M0 0h7v5H6v1H5v1H4v1H3V7H2V6H1V5H0z" fill="currentColor"/><path d="M1 1h5v3H5v1H4v1H3V5H2V4H1z" fill="#0b0916" opacity=".35"/></svg>';
+const TROPHY = '<svg viewBox="0 0 7 7" aria-hidden="true"><path d="M1 0h5v1h1v2H6v1H5v1H4v1h1v1H2V6h1V5H2V4H1V3H0V1h1z" fill="currentColor"/></svg>';
+function tierBadge(elo, compact) {
+  const t = tierOf(elo);
+  return `<span class="tier-badge" style="color:${t.color}" title="${t.name} tier">${SHIELD}${compact ? '' : `<em>${t.name.toUpperCase()}</em>`}</span>`;
+}
+const PLACE_COL = ['#ffcc33', '#d6dde8', '#d38a52'];
+function trophies(badges) {
+  return (badges || []).slice(0, 3).map(b => `<span class="trophy" style="color:${PLACE_COL[b.place - 1]}" title="#${b.place} in Season ${b.season}">${TROPHY}<em>S${b.season}</em></span>`).join('');
+}
+
 function backEl() { const d = document.createElement('div'); d.className = 'back bigback'; return d; }
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
@@ -168,6 +182,7 @@ function lockTabs(on) { [...$('tabs').children].forEach(b => { b.disabled = on; 
 function updateTop() {
   const p = S.me; if (!p) return;
   $('bal').textContent = fmt(p.balance); $('elo').textContent = p.elo;
+  if (S.cfg) $('tierTop').innerHTML = `${tierBadge(p.elo)}`;
   $('nick').textContent = p.nickname || ''; $('addr').textContent = shortAddr(p.address);
   $('sfx').setAttribute('aria-pressed', S.sfx); $('sfx').textContent = S.sfx ? 'SFX ON' : 'SFX OFF';
 }
@@ -243,19 +258,38 @@ async function boot() {
   let me;
   try { me = await api('/api/me'); } catch (e) { return renderLogin(S.token ? e.message : ''); }
   if (!S.token) return;
-  S.me = me.profile; S.cards = me.cards; S.decks = me.decks;
+  S.me = me.profile; S.cards = me.cards; S.decks = me.decks; S.badges = me.badges; S.seasonResult = me.seasonResult;
   if (!S.me.nickname) return renderNickname();
   enterApp();
 }
 async function refreshMe() {
   const me = await api('/api/me');
-  S.me = me.profile; S.cards = me.cards; S.decks = me.decks; updateTop();
+  S.me = me.profile; S.cards = me.cards; S.decks = me.decks; S.badges = me.badges; S.seasonResult = me.seasonResult; updateTop();
+  maybeSeasonModal();
 }
 function enterApp() {
   $('walletBar').hidden = false; $('tabs').hidden = false; updateTop();
   connectSocket();
   setTab('arena');
+  maybeSeasonModal();
 }
+// ---------- season end popup ----------
+function maybeSeasonModal() {
+  const r = S.seasonResult;
+  if (!r || S.match || !$('seasonModal').hidden) return;
+  const top3 = r.place <= 3;
+  $('smTitle').textContent = `SEASON ${r.season} IS OVER`;
+  $('smBody').innerHTML = `<div class="sm-place num" style="color:${top3 ? PLACE_COL[r.place - 1] : 'var(--fg)'}">#${r.place}</div>
+    <p class="note">You finished ${ordinal(r.place)} of ${fmt(r.of)} qualified players with ${r.elo} ELO (${r.wins}W ${r.losses}L ${r.draws}D).</p>
+    ${r.reward ? `<p class="sm-reward num">+${fmt(r.reward)} FLIP</p>` : '<p class="note">Only the top 100 earn FLIP. Climb higher next week!</p>'}
+    ${top3 ? `<p class="sm-badge">${trophies([{ season: r.season, place: r.place }])} New badge unlocked</p>` : ''}
+    <p class="note">Your rating moved from ${r.elo} to ${r.newElo} for the new season.</p>`;
+  drawSprite($('smArt'), top3 ? 11 * 31 + 5 : 9 * 31 + 5, top3 ? 'fire' : 'wind', top3 ? 'legendary' : 'epic');
+  $('seasonModal').hidden = false;
+  r.reward ? (top3 ? SFX.legend() : SFX.win()) : SFX.flip();
+}
+const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
+$('smOk').onclick = () => { $('seasonModal').hidden = true; S.seasonResult = null; api('/api/season/seen', {}).catch(() => {}); SFX.click(); };
 
 // ---------- realtime ----------
 function connectSocket() {
@@ -271,6 +305,7 @@ function connectSocket() {
   s.on('match:state', onMatchState);
   s.on('match:end', onMatchEnd);
   s.on('market:update', onMarketUpdate);
+  s.on('season:ended', d => { toast(`Season ${d.season} is over. Season ${d.next} has started!`); refreshMe().then(() => { if (current === 'ranks') renderRanks(); }).catch(() => {}); });
   s.on('market:sold', d => {
     S.me = d.profile; updateTop(); SFX.coin();
     toast(`${d.buyer} bought your ${d.card} for ${fmt(d.price)} FLIP. You received ${fmt(d.received)} FLIP.`);
@@ -461,10 +496,10 @@ let lastRevealRound = 0;
 function renderMatch() {
   const m = S.match;
   const oppLeft = m.opp.leftElements;
-  $('oppSide').innerHTML = `<b>${esc(m.opp.nickname)}</b><span class="meta num">ELO ${m.opp.elo} · ⚡ ${m.opp.energy}</span>
+  $('oppSide').innerHTML = `<b>${esc(m.opp.nickname)} ${trophies(m.opp.badges)}</b><span class="meta num">${m.room.practice ? '' : tierBadge(m.opp.elo, true) + ' '}ELO ${m.opp.elo} · ⚡ ${m.opp.energy}</span>
     <div class="left" title="Elements of their remaining cards">${oppLeft.map(el => `<i class="e-${el}"></i>`).join('')}</div>
     <span class="locked-note">${m.phase === 'pick' && m.opp.locked ? 'LOCKED IN' : ''}</span>`;
-  $('mySide').innerHTML = `<b>${esc(m.you.nickname)}</b><span class="meta num">ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>`;
+  $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>`;
   $('score').textContent = `${m.opp.wins} : ${m.you.wins}`;
   $('rnd').textContent = `ROUND ${m.round}/5`;
   $('pot').textContent = m.room.practice ? 'PRACTICE · NO STAKES' : `Pot ${fmt(m.room.stake * 2)} FLIP`;
@@ -529,7 +564,18 @@ $('lock').onclick = async () => {
 // ---------- result ----------
 function onMatchEnd(r) {
   clearInterval(timerT); S.match = null; lockTabs(false);
+  const oldElo = S.me.elo;
   S.me = r.profile; updateTop();
+  setTimeout(() => {
+    const a = tierOf(oldElo), b = tierOf(r.profile.elo);
+    if (!r.practice && a.id !== b.id) {
+      const up = b.min > a.min;
+      $('resSub').insertAdjacentHTML('afterend', `<p class="promo ${up ? 'up' : 'down'}">${up ? 'PROMOTED TO' : 'DROPPED TO'} ${tierBadge(r.profile.elo)}</p>`);
+      if (up) SFX.legend();
+    }
+  }, 0);
+  document.querySelectorAll('#result .promo').forEach(e => e.remove());
+  setTimeout(maybeSeasonModal, 2500);
   const rows = [`<dt>Your entry</dt><dd class="num">−${fmt(r.stake)}</dd>`];
   if (r.practice) {
     rows.length = 0;
@@ -882,15 +928,50 @@ async function openPack(p, useFree) {
 }
 
 // ---------- ranks ----------
+let seasonClockT = null;
+function startSeasonClock(endsAt, skew) {
+  clearInterval(seasonClockT);
+  const draw = () => {
+    if (current !== 'ranks') return clearInterval(seasonClockT);
+    const ms = Math.max(0, endsAt - (Date.now() + skew));
+    const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4), s = Math.floor(ms % 6e4 / 1e3);
+    $('seasonClock').textContent = ms ? `${d}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s` : 'Ending…';
+  };
+  draw(); seasonClockT = setInterval(draw, 1000);
+}
 async function renderRanks() {
   show('ranks');
   $('rankWrap').innerHTML = '<p class="emptystate">Loading leaderboard…</p>';
   let data;
   try { data = await api('/api/leaderboard'); } catch (e) { $('rankWrap').innerHTML = `<p class="emptystate">${esc(e.message)}</p>`; return; }
-  $('rankStats').innerHTML = `<span><b class="num">${fmt(data.totalPlayers)}</b> players</span><span><b class="num">${fmt(data.online)}</b> online</span><span><b class="num">${fmt(data.burned)}</b> FLIP burned</span>`;
-  if (!data.players.length) { $('rankWrap').innerHTML = '<p class="emptystate">No players yet.</p>'; return; }
-  $('rankWrap').innerHTML = `<table><thead><tr><th>#</th><th>Player</th><th class="r">ELO</th><th class="r">W</th><th class="r">L</th><th class="r">D</th></tr></thead><tbody>` +
-    data.players.map(p => `<tr class="${p.id === S.me.id ? 'me' : ''}"><td class="num">${p.rank}</td><td>${esc(p.nickname)}${p.id === S.me.id ? ' (you)' : ''}</td><td class="r num">${p.elo}</td><td class="r num">${p.wins}</td><td class="r num">${p.losses}</td><td class="r num">${p.draws}</td></tr>`).join('') +
+  const SN = S.cfg.season, me = data.me;
+  $('seasonTitle').textContent = `Season ${data.season.number}`;
+  startSeasonClock(data.season.endsAt, data.season.serverNow - Date.now());
+  $('minMatches').textContent = SN.minMatches;
+  // your standing
+  const need = Math.max(0, SN.minMatches - (me.played || 0));
+  const nt = nextTier(me.elo);
+  $('myRank').innerHTML = `<div class="mr-place"><span class="num">${me.rank ? '#' + me.rank : '–'}</span><small>${me.rank ? 'OF ' + fmt(data.ranked) : 'NOT RANKED YET'}</small></div>
+    <div class="mr-info"><b>${esc(me.nickname)} ${trophies(S.badges)}</b>
+      <span>${tierBadge(me.elo)} <span class="num">${me.elo} ELO</span>${nt ? ` · <span class="muted">${nt.min - me.elo} to ${nt.name}</span>` : ''}</span>
+      <span class="muted num">This season: ${me.wins || 0}W ${me.losses || 0}L ${me.draws || 0}D</span></div>
+    <div class="mr-reward">${need ? `<b>PLAY ${need} MORE</b><small>RANKED MATCH${need > 1 ? 'ES' : ''} TO QUALIFY</small>`
+      : me.reward ? `<b class="num">+${fmt(me.reward)}</b><small>FLIP IF THE SEASON ENDED NOW</small>` : `<b>TOP 100 PAY</b><small>CLIMB TO EARN FLIP</small>`}</div>`;
+  // rewards
+  const R = S.cfg.rewards;
+  $('rewardGrid').innerHTML = [1, 2, 3, 4, 5, 10, 20, 50, 100].map(p => `<div class="${p <= 3 ? 'rw-top' : ''}" ${p <= 3 ? `style="--c:${PLACE_COL[p - 1]}"` : ''}><span>${p <= 3 ? TROPHY : ''}#${p}</span><b class="num">${fmt(R[p - 1])}</b></div>`).join('');
+  $('tierRow').innerHTML = S.cfg.tiers.map(t => `<span class="tier-badge" style="color:${t.color}">${SHIELD}<em>${t.name.toUpperCase()}</em><small class="num">${t.min ? t.min + '+' : '<' + S.cfg.tiers[1].min}</small></span>`).join('');
+  // last season podium
+  const pod = data.lastSeason && data.lastSeason.podium;
+  $('podium').hidden = !(pod && pod.length);
+  if (pod && pod.length) $('podium').innerHTML = `<h3 class="muted">SEASON ${data.lastSeason.number} CHAMPIONS</h3><div class="pod-row">` +
+    pod.map(p => `<div class="pod" style="--c:${PLACE_COL[p.place - 1]}">${TROPHY}<b>${esc(p.nickname)}</b><span class="num">#${p.place} · ${p.elo} ELO</span><span class="num">+${fmt(p.reward)} FLIP</span></div>`).join('') + '</div>';
+  $('rankStats').innerHTML = `<span><b class="num">${fmt(data.ranked)}</b> ranked</span><span><b class="num">${fmt(data.online)}</b> online</span>`;
+  if (!data.players.length) { $('rankWrap').innerHTML = '<p class="emptystate">Nobody has played a ranked match this season yet. Be the first!</p>'; return; }
+  $('rankWrap').innerHTML = `<table class="lb"><thead><tr><th>#</th><th>Player</th><th class="r">ELO</th><th class="r">W-L-D</th><th class="r">Reward</th></tr></thead><tbody>` +
+    data.players.map(p => `<tr class="${p.id === S.me.id ? 'me' : ''}${p.place && p.place <= 3 ? ' top' + p.place : ''}"><td class="num">${p.rank}</td>
+      <td>${tierBadge(p.elo, true)} ${esc(p.nickname)}${p.id === S.me.id ? ' (you)' : ''} ${trophies(p.badges)}</td><td class="r num">${p.elo}</td>
+      <td class="r num">${p.wins}-${p.losses}-${p.draws}</td><td class="r num">${p.qualified ? (p.reward ? fmt(p.reward) : '–') : `<span class="muted" title="Needs ${SN.minMatches - p.played} more ranked match(es)">${p.played}/${SN.minMatches}</span>`}</td></tr>`).join('') +
     '</tbody></table>';
 }
 

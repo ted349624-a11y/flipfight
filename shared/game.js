@@ -66,6 +66,40 @@ function fusionChance(rarity, n) {
   return 1 - Math.pow(1 - t.base, n - 1);
 }
 
+// Seasons: every season lasts 7 days. Your ELO is your season rating.
+// To earn a reward you must play at least `minMatches` ranked matches in the season.
+// Rewards by final place among qualified players:
+//   1st 1,000,000   2nd 500,000   3rd 250,000
+//   4th-100th: 800,000 / place, rounded down to the nearest 1,000  (4th 200,000 · 10th 80,000 · 50th 16,000 · 100th 8,000)
+// The top 3 also get a permanent badge for that season.
+// When a season ends, ratings move halfway back to 1200 (1500 -> 1350, 1000 -> 1100) and season stats reset.
+const SEASON = {
+  lengthMs: 7 * 24 * 60 * 60 * 1000,
+  minMatches: 3,
+  paidPlaces: 100,
+  topRewards: [1000000, 500000, 250000],
+  curveNumerator: 800000,
+  resetTo: 1200,
+  resetKeep: 0.5,
+};
+function seasonReward(place) {
+  if (place < 1 || place > SEASON.paidPlaces) return 0;
+  if (place <= SEASON.topRewards.length) return SEASON.topRewards[place - 1];
+  return Math.floor(SEASON.curveNumerator / place / 1000) * 1000;
+}
+function seasonResetElo(elo) { return Math.round(SEASON.resetTo + (elo - SEASON.resetTo) * SEASON.resetKeep); }
+
+// Rank tiers by ELO (lowest first).
+const TIERS = [
+  { id: 'bronze', name: 'Bronze', min: 0, color: '#c98a4b' },
+  { id: 'silver', name: 'Silver', min: 1150, color: '#c9d1e0' },
+  { id: 'gold', name: 'Gold', min: 1300, color: '#ffcc33' },
+  { id: 'platinum', name: 'Platinum', min: 1450, color: '#5fd3c8' },
+  { id: 'diamond', name: 'Diamond', min: 1600, color: '#8fb8ff' },
+  { id: 'master', name: 'Master', min: 1800, color: '#ff6bd6' },
+];
+function tierOf(elo) { let t = TIERS[0]; for (const x of TIERS) if (elo >= x.min) t = x; return t; }
+
 // Marketplace: players list cards for FLIP. The buyer pays the price; the seller receives it minus a 5% fee
 // (half burned, half to the treasury). Listed cards can't be used in decks or the Forge until the listing is cancelled.
 const MARKET = {
@@ -104,4 +138,4 @@ function effectivePower(card, exhausted, vsElement) {
   return Math.round(card.pow * elementBonus * (exhausted ? 0.5 : 1));
 }
 
-module.exports = { MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

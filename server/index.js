@@ -8,6 +8,7 @@ const { verifyMessage, getAddress } = require('ethers');
 const db = require('./db');
 const G = require('../shared/game');
 const { createMatchmaker } = require('./match');
+const { createSeasons } = require('./season');
 
 const PORT = Number(process.env.PORT) || 3000;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -104,10 +105,19 @@ async function createUser(address) {
 
 function publicProfile(u) {
   return {
-    id: u.id, address: u.address, nickname: u.nickname, balance: u.balance, elo: u.elo,
+    id: u.id, address: u.address, nickname: u.nickname, balance: u.balance, elo: u.elo, tier: G.tierOf(u.elo).id,
     wins: u.wins, losses: u.losses, draws: u.draws, freePacks: u.free_packs,
+    season: { played: u.season_played || 0, wins: u.season_wins || 0, losses: u.season_losses || 0, draws: u.season_draws || 0 },
     bonusReadyIn: Math.max(0, u.last_bonus + G.ECONOMY.dailyBonusMs - now()),
   };
+}
+// Top-3 season finishes, as permanent badges: { userId: [{ season, place }] }
+async function badgesOf(ids) {
+  const out = {};
+  if (!ids.length) return out;
+  for (const r of await db.all('SELECT user_id, season, place FROM season_results WHERE place <= 3 AND user_id = ANY($1::int[]) ORDER BY season DESC', [ids]))
+    (out[r.user_id] = out[r.user_id] || []).push({ season: r.season, place: r.place });
+  return out;
 }
 const ownedCards = async userId => (await q.cardsOf(userId)).map(r => Object.assign(G.cardView(r), r.listing_id ? { listingId: r.listing_id, listPrice: r.listing_price } : {}));
 async function decksOf(userId) {
@@ -192,11 +202,16 @@ app.post('/api/logout', auth, route(async (req, res) => {
 
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
-  res.json({ market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
+  res.json({ season: G.SEASON, tiers: G.TIERS, rewards: Array.from({ length: G.SEASON.paidPlaces }, (_, i) => G.seasonReward(i + 1)), market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {
-  res.json({ profile: publicProfile(req.user), cards: await ownedCards(req.user.id), decks: await decksOf(req.user.id), activeMatch: matchmaker.activeMatchOf(req.user.id) });
+  const unseen = await db.one(`SELECT r.*, (SELECT COUNT(*)::int FROM season_results x WHERE x.season = r.season) AS field
+                               FROM season_results r WHERE r.user_id = $1 AND NOT r.seen ORDER BY r.season DESC LIMIT 1`, [req.user.id]);
+  res.json({ profile: publicProfile(req.user), badges: (await badgesOf([req.user.id]))[req.user.id] || [], cards: await ownedCards(req.user.id),
+    decks: await decksOf(req.user.id), activeMatch: matchmaker.activeMatchOf(req.user.id),
+    seasonResult: !unseen ? null : { season: unseen.season, place: unseen.place, of: unseen.field, reward: unseen.reward, elo: unseen.elo,
+      wins: unseen.wins, losses: unseen.losses, draws: unseen.draws, newElo: req.user.elo } });
 }));
 
 app.post('/api/nickname', auth, route(async (req, res) => {
@@ -400,14 +415,39 @@ app.post('/api/market/buy', auth, route(async (req, res) => {
   res.json({ ok: true, card: (await ownedCards(req.user.id)).find(x => x.uid === sale.card_uid), price: sale.price, profile: publicProfile(buyer) });
 }));
 
+app.post('/api/season/seen', auth, route(async (req, res) => {
+  await db.query('UPDATE season_results SET seen = TRUE WHERE user_id = $1', [req.user.id]);
+  res.json({ ok: true });
+}));
+
+// Season leaderboard: everyone who played a ranked match this season, ordered by rating.
+// Reward places count only qualified players (min matches), so the projected reward is shown per row.
 app.get('/api/leaderboard', route(async (req, res) => {
-  const players = await db.all(`SELECT id, nickname, elo, wins, losses, draws FROM users WHERE nickname IS NOT NULL
-                                ORDER BY elo DESC, wins DESC, id ASC LIMIT 100`);
+  const token = (req.headers.authorization || '').replace(/^Bearer /, '');
+  const viewer = token ? await sessionUser(token) : null;
+  const season = seasons.current() || await seasons.load();
+  const rows = await db.all(`SELECT id, nickname, elo, season_played AS played, season_wins AS wins, season_losses AS losses, season_draws AS draws
+                             FROM users WHERE nickname IS NOT NULL AND season_played > 0 ORDER BY elo DESC, season_wins DESC, id ASC`);
+  let q2 = 0;
+  const ranked = rows.map((u, i) => {
+    const qualified = u.played >= G.SEASON.minMatches;
+    const place = qualified ? ++q2 : null;
+    return { rank: i + 1, ...u, tier: G.tierOf(u.elo).id, qualified, place, reward: place ? G.seasonReward(place) : 0 };
+  });
+  const top = ranked.slice(0, 100);
+  const meRow = viewer && ranked.find(r => r.id === viewer.id);
+  const badges = await badgesOf([...new Set(top.map(r => r.id).concat(meRow ? [meRow.id] : []))]);
+  top.forEach(r => (r.badges = badges[r.id] || []));
+  if (meRow) meRow.badges = badges[meRow.id] || [];
+  const last = await db.one('SELECT number FROM seasons WHERE finalized_at IS NOT NULL ORDER BY number DESC LIMIT 1');
+  const podium = last ? await db.all(`SELECT r.place, r.elo, r.reward, u.nickname FROM season_results r JOIN users u ON u.id = r.user_id
+                                      WHERE r.season = $1 AND r.place <= 3 ORDER BY r.place`, [last.number]) : [];
   const total = await db.one('SELECT COUNT(*)::int AS n FROM users WHERE nickname IS NOT NULL');
   res.json({
-    players: players.map((u, i) => ({ rank: i + 1, ...u })),
-    totalPlayers: total.n, burned: await db.getStat('burned'), seasonPool: await db.getStat('season'),
-    online: matchmaker.onlineCount(),
+    season: { number: season.number, startsAt: Number(season.starts_at), endsAt: Number(season.ends_at), serverNow: Date.now() },
+    players: top, me: meRow || (viewer ? { id: viewer.id, nickname: viewer.nickname, elo: viewer.elo, tier: G.tierOf(viewer.elo).id, played: viewer.season_played, rank: null } : null),
+    ranked: ranked.length, totalPlayers: total.n, lastSeason: last && { number: last.number, podium },
+    burned: await db.getStat('burned'), online: matchmaker.onlineCount(),
   });
 }));
 
@@ -446,7 +486,8 @@ io.use((socket, next) => {
   }).catch(() => next(new Error('unavailable')));
 });
 
-const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile });
+const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf });
+const seasons = createSeasons({ db, G, io });
 io.on('connection', socket => matchmaker.onConnection(socket));
 
 setInterval(() => {
@@ -455,5 +496,6 @@ setInterval(() => {
 }, 60 * 60 * 1000).unref();
 
 db.init()
+  .then(() => seasons.start())
   .then(() => server.listen(PORT, () => console.log(`Flipfight running on http://localhost:${PORT}`)))
   .catch(err => { console.error('Could not connect to the database:', err.message); process.exit(1); });

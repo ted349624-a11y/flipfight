@@ -411,3 +411,57 @@ body{background:transparent}
 .mk-sell-form input:focus{box-shadow:0 0 0 4px var(--gold)}
 .listedtag{position:absolute;top:-14px;left:-6px;font-family:var(--font-px);font-size:7px;padding:4px 5px;background:var(--wind);color:#0b1a22;z-index:2}
 @media (max-width:420px){.mk-tile{width:118px}}
+
+/* ---------- tiers, badges, seasons ---------- */
+.tier-badge{display:inline-flex;align-items:center;gap:4px;vertical-align:middle}
+.tier-badge svg{width:12px;height:14px;shape-rendering:crispEdges;flex:none}
+.tier-badge em{font-style:normal;font-family:var(--font-px);font-size:8px;letter-spacing:.06em}
+.tier-badge small{font-size:15px;color:var(--muted);margin-left:2px}
+.stat #tierTop{display:inline-flex}
+.trophy{display:inline-flex;align-items:center;gap:2px;vertical-align:middle;margin:0 2px}
+.trophy svg{width:12px;height:12px;shape-rendering:crispEdges}
+.trophy em{font-style:normal;font-family:var(--font-px);font-size:7px}
+.season-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 18px;--b:var(--gold)}
+.season-head .tier-label{font-family:var(--font-px);font-size:8px;color:var(--muted)}
+.season-head h2{font-size:18px;color:var(--gold);margin-top:6px}
+.countdown{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.countdown span{font-family:var(--font-px);font-size:14px;color:var(--wind)}
+.countdown small{font-family:var(--font-px);font-size:7px;color:var(--muted)}
+.my-rank{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:16px 18px;--b:var(--wind)}
+.mr-place{display:flex;flex-direction:column;align-items:center;min-width:80px}
+.mr-place span{font-family:var(--font-px);font-size:22px;color:var(--fg)}
+.mr-place small,.mr-reward small{font-family:var(--font-px);font-size:7px;color:var(--muted);text-align:center;line-height:1.5}
+.mr-info{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:19px}
+.mr-info b{font-family:var(--font-px);font-size:10px;font-weight:400;overflow-wrap:anywhere}
+.mr-reward{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.mr-reward b{font-family:var(--font-px);font-size:13px;color:var(--good);font-weight:400}
+.reward-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.reward-grid div{display:flex;flex-direction:column;gap:4px;padding:8px 10px;background:#1a1730;box-shadow:0 0 0 2px var(--line)}
+.reward-grid div span{font-family:var(--font-px);font-size:9px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.reward-grid div span svg{width:11px;height:11px;shape-rendering:crispEdges}
+.reward-grid div b{font-family:var(--font-px);font-size:11px;font-weight:400;color:var(--gold)}
+.reward-grid .rw-top{box-shadow:0 0 0 2px var(--c)}
+.reward-grid .rw-top span{color:var(--c)}
+.tier-row{display:flex;flex-wrap:wrap;gap:10px 16px;margin-top:12px}
+.podium{padding:14px 18px;display:flex;flex-direction:column;gap:12px}
+.pod-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.pod{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:10px 6px;box-shadow:0 0 0 2px var(--c);color:var(--c);min-width:0}
+.pod svg{width:22px;height:22px;shape-rendering:crispEdges}
+.pod b{font-family:var(--font-px);font-size:9px;font-weight:400;color:var(--fg);overflow-wrap:anywhere}
+.pod span{font-size:17px;color:var(--muted)}
+table.lb tr.top1 td:first-child{color:#ffcc33} table.lb tr.top2 td:first-child{color:#d6dde8} table.lb tr.top3 td:first-child{color:#d38a52}
+.promo{font-family:var(--font-px);font-size:10px;display:flex;align-items:center;gap:8px;justify-content:center;margin:0}
+.promo.up{color:var(--good)} .promo.down{color:var(--bad)}
+.modal-wrap{position:fixed;inset:0;z-index:30;background:rgba(8,6,18,.82);display:grid;place-items:center;padding:20px max(16px,env(safe-area-inset-left,0px))}
+.modal{width:min(440px,100%);padding:24px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;--b:var(--gold)}
+.modal canvas{width:84px;height:84px;image-rendering:pixelated}
+.modal h2{color:var(--gold)}
+.sm-place{font-family:var(--font-px);font-size:40px;line-height:1.2}
+.sm-reward{font-family:var(--font-px);font-size:18px;color:var(--good);margin:6px 0}
+.sm-badge{font-family:var(--font-px);font-size:9px;color:var(--gold);display:flex;align-items:center;gap:6px;justify-content:center}
+@media (max-width:560px){
+  .my-rank{grid-template-columns:auto 1fr}
+  .mr-reward{grid-column:1/-1;flex-direction:row;justify-content:center;gap:10px}
+  .pod-row{grid-template-columns:1fr}
+  .countdown{align-items:flex-start}
+}

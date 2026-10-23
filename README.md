@@ -10,7 +10,9 @@ Pixel art NFT kart düellosu. Oyuncular MetaMask ile giriş yapar, takma ad seç
 - **Gerçek zamanlı PvP:** Oda kuyrukları, sunucu tarafında oynanan maçlar, 20 saniyelik tur süresi (süre dolarsa rastgele kart oynanır), sayfa yenilense bile maça geri dönme.
 - **Sunucu otoritesi:** Bakiye, kart sahipliği, paket açma (kriptografik rastgelelik), deste kuralları ve maç sonucu tamamen sunucuda hesaplanır. Tarayıcı sadece seçim gönderir.
 - **Ekonomi:** Giriş tutarı maç başında kilitlenir, kazanan havuzu alır. %5 komisyonun %40'ı yakılır, %40'ı hazineye, %20'si sezon havuzuna gider. Paket fiyatının yarısı yakılır.
-- **Lider tablosu ve geçmiş:** ELO (K=32) sıralaması, galibiyet/mağlubiyet/beraberlik, çevrim içi oyuncu sayısı, son 20 maç.
+- **Haftalık sezonlar:** Her sezon 7 gün sürer; ELO sezon puanıdır (K=32). Ödül için sezonda en az 3 dereceli maç gerekir. Sezon bitince sunucu otomatik olarak ilk 100'e öder: 1. 1.000.000, 2. 500.000, 3. 250.000, 4-100. sıra `800.000 ÷ sıra` (1.000'e aşağı yuvarlanır; toplam 4.393.000 FLIP). İlk 3 kalıcı rozet alır. Ardından puanlar 1200'e doğru yarı yarıya çekilir ve sezon istatistikleri sıfırlanır. Sunucu uyuyup sezon bitişini kaçırırsa uyanınca telafi eder; her sezon tek bir kilitli işlemde kapanır.
+- **Rütbeler:** Bronze, Silver (1150), Gold (1300), Platinum (1450), Diamond (1600), Master (1800) piksel rozetleri; üst barda, maçta ve sıralamada görünür.
+- **Lider tablosu ve geçmiş:** Sezon sıralaması, kendi sıran (ilk 100 dışında olsan bile), öngörülen ödül, geri sayım, geçen sezonun şampiyonları, son 20 maç.
 - **Günlük bonus:** 24 saatte bir 25.000 FLIP.
 - **Market (gerçek zamanlı pazar yeri):** Oyuncular kartlarını FLIP karşılığı listeler; yeni ilanlar, satışlar ve iptaller Socket.io ile herkese anında yansır, satıcıya satış bildirimi gider. Alıcı fiyatı öder, satıcı %5 komisyon düşülmüş tutarı alır (yarısı yakılır, yarısı hazineye). Satın alma tek bir atomik işlemle yapılır; aynı kartı iki kişi aynı anda alamaz. Listelenen kart destede ve Forge'da kullanılamaz; oyuncu en az 5 listelenmemiş kartla kalır, en fazla 20 ilan açabilir.
 - **Forge (kart birleştirme):** Aynı nadirlikte 2-4 kart birleştirilir. Başarı şansı `1 − (1 − taban)^(kart − 1)`; tabanlar common→rare %40, rare→epic %25, epic→legendary %12. Başarıda bir üst nadirlikte rastgele kart, başarısızlıkta aynı nadirlikte rastgele bir kart geri gelir; kullanılan kartlar her durumda harcanır ve ücret (5.000 / 20.000 / 60.000 FLIP) yakılır. Oyuncu en az 5 kartla kalır. Oranlar ve beklenen maliyetler: `node scripts/fusion-sim.js`.
@@ -37,6 +39,8 @@ node scripts/bot-sim.js                               # bot seviyelerinin kazanm
 node scripts/fusion-sim.js                            # birleştirme oranları ve beklenen maliyetler (sunucu gerekmez)
 node scripts/fusion-test.js http://localhost:3000     # birleştirme kuralları ve hata durumları
 node scripts/market-test.js http://localhost:3000     # pazar yeri: kurallar, canlı olaylar, iki alıcının yarışı
+node scripts/elo-test.js http://localhost:3000        # ELO değişimi ve sıralama
+node scripts/season-test.js http://localhost:3000 KEY play   # sezon maçları; sonra sezonu bitirip 'check' ile ödülleri doğrula
 ```
 
 "Coming soon" açıkken test betiklerine önizleme anahtarını ikinci argüman olarak ver.
