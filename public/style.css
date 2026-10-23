@@ -1,3 +1,9 @@
+/* Base reset (the Claude preview added these automatically; the standalone site needs them) */
+[hidden]{display:none!important}
+html,body{margin:0}
+img{max-width:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+
 /* Layout: single-column arcade cabinet — top bar, tab nav, screens (arena → deck → queue → match → result, plus collection/shop/ranks/history) */
 :root{
   --bg:#13111f; --bg2:#1c1930; --panel:#221e3a; --line:#3d3668; --fg:#f3ecd6; --muted:#9d96c6;
@@ -280,3 +286,6 @@ footer{font-size:18px;color:var(--muted);text-align:center;padding-top:8px}
 .statline{display:flex;gap:18px;flex-wrap:wrap;font-size:19px;color:var(--muted)}
 .statline b{color:var(--fg);font-weight:400}
 a{color:var(--wind)}
+
+/* let the pixel night-sky canvas show through (html keeps the solid fallback colour) */
+body{background:transparent}
