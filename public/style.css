@@ -289,3 +289,43 @@ a{color:var(--wind)}
 
 /* let the pixel night-sky canvas show through (html keeps the solid fallback colour) */
 body{background:transparent}
+
+/* ---------- how-to-play guide ---------- */
+.guide{padding:0}
+.guide summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 18px}
+.guide summary::-webkit-details-marker{display:none}
+.guide summary span{font-family:var(--font-px);font-size:12px;color:var(--gold)}
+.guide summary span::before{content:"▶ ";font-size:9px}
+.guide[open] summary span::before{content:"▼ "}
+.guide summary small{font-size:18px;color:var(--muted)}
+.guide summary:focus-visible{outline:3px dashed var(--wind);outline-offset:4px}
+.guide-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:4px 18px 20px}
+.g-block{display:flex;flex-direction:column;gap:10px;min-width:0;padding:14px;background:#1a1730;box-shadow:0 0 0 2px var(--line)}
+.g-block h3{color:var(--gold);font-size:10px}
+.g-block p,.g-block li,.g-block dd{font-size:20px;line-height:1.25;color:var(--fg)}
+.g-block b{font-weight:400;color:var(--gold)}
+.g-lead,.g-formula,.g-tips{grid-column:1/-1}
+.g-lead{background:#241d40;box-shadow:0 0 0 2px var(--gold-d)}
+.g-anatomy{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.g-sample .card{margin:4px}
+.g-legend{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:start;flex:1;min-width:180px}
+.g-legend dt{display:flex;justify-content:center;padding-top:2px}
+.g-legend dd{margin:0;color:var(--muted)}
+.g-legend dd b{color:var(--fg)}
+.g-pow{font-family:var(--font-px);font-size:11px;color:var(--fg)!important}
+.g-swatch{width:22px;height:22px;box-shadow:0 0 0 3px #b26bff inset}
+.g-table{min-width:0;font-size:19px}
+.g-table td{padding:6px 10px}
+.g-table th{padding:6px 10px}
+.g-good{color:var(--good)!important} .g-bad{color:var(--bad)!important}
+.g-steps,.g-list,.g-examples{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px}
+.g-steps li::marker{color:var(--gold);font-family:var(--font-px);font-size:10px}
+.g-list li::marker,.g-examples li::marker{color:var(--gold)}
+.g-cycle{font-size:9px}
+.g-eq{font-family:var(--font-px);font-size:11px!important;line-height:1.9!important;color:var(--fg)}
+.g-eq span{color:var(--wind)}
+.g-note{grid-column:1/-1;font-size:18px;color:var(--muted);text-align:center}
+@media (max-width:760px){ .guide-body{grid-template-columns:1fr;padding:4px 12px 16px} }
+.g-table td,.g-table th{padding:6px 6px}
+.g-table{font-size:18px}
+@media (max-width:420px){.g-rooms th:nth-child(3),.g-rooms td:nth-child(3){display:none}}

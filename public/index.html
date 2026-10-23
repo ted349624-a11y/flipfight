@@ -71,15 +71,6 @@
       <h3>DAILY BONUS READY</h3>
       <button class="btn" id="claim">Claim 25,000 FLIP</button>
     </div>
-    <details class="frame howto">
-      <summary>How to play</summary>
-      <div class="rules">
-        <div><h3>BLIND PICKS</h3><p>Both players lock a card, then both cards flip together.</p></div>
-        <div><h3>ELEMENTS +30%</h3><p class="cycle"><span class="e e-fire">FIRE</span>›<span class="e e-wind">WIND</span>›<span class="e e-earth">EARTH</span>›<span class="e e-water">WATER</span>›<span class="e e-fire">FIRE</span></p></div>
-        <div><h3>15 ENERGY</h3><p>A card you can't afford still plays, at half power.</p></div>
-        <div><h3>20 SECONDS</h3><p>No pick in time? A random card plays for you.</p></div>
-      </div>
-    </details>
   </section>
 
   <!-- DECK -->
@@ -180,6 +171,123 @@
     <h2>Your last matches</h2>
     <div class="frame tblwrap" id="histWrap"></div>
   </section>
+
+  <!-- HOW TO PLAY (shown on the sign-in and arena screens) -->
+  <details class="frame guide" id="guide" hidden>
+    <summary><span>HOW TO PLAY</span><small>Full guide · 2 min read</small></summary>
+    <div class="guide-body">
+
+      <div class="g-block g-lead">
+        <h3>THE GOAL</h3>
+        <p>Pick a room, lock your entry fee and duel a real player. A match has up to <b>5 rounds</b>. Win <b>3 rounds</b> and you take the pot: both entry fees minus a small house fee. If the match ends level, both players get their entry back.</p>
+      </div>
+
+      <div class="g-block">
+        <h3>1 · READ A CARD</h3>
+        <div class="g-anatomy">
+          <div id="guideCard" class="g-sample"></div>
+          <dl class="g-legend">
+            <dt><span class="cost">4</span></dt><dd><b>Energy cost.</b> What the card spends from your 15 energy when you play it.</dd>
+            <dt><span class="el e-water">WATER</span></dt><dd><b>Element.</b> Decides which cards it beats (see step 4).</dd>
+            <dt><b class="g-pow">⚔ 68</b></dt><dd><b>Power.</b> The base strength of the card.</dd>
+            <dt><span class="g-swatch"></span></dt><dd><b>Border colour</b> shows rarity: grey common, blue rare, purple epic, gold legendary.</dd>
+          </dl>
+        </div>
+        <div class="tblwrap"><table class="g-table">
+          <thead><tr><th>Rarity</th><th class="r">Energy</th><th class="r">Power</th></tr></thead>
+          <tbody>
+            <tr><td style="color:#a7a3c2">Common</td><td class="r num">2</td><td class="r num">21–30</td></tr>
+            <tr><td style="color:#4fa3ff">Rare</td><td class="r num">3</td><td class="r num">45–52</td></tr>
+            <tr><td style="color:#b26bff">Epic</td><td class="r num">4</td><td class="r num">66–72</td></tr>
+            <tr><td style="color:#ffcc33">Legendary</td><td class="r num">6</td><td class="r num">90–96</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="g-block">
+        <h3>2 · BUILD A DECK</h3>
+        <p>Choose <b>5 cards</b> from your collection for each room. Every room has a <b>deck power cap</b>: the total power of your 5 cards can't go over it, so new players don't run into decks full of legendaries.</p>
+        <div class="tblwrap"><table class="g-table g-rooms">
+          <thead><tr><th>Room</th><th class="r">Entry</th><th class="r">Deck cap</th><th class="r">Win nets</th></tr></thead>
+          <tbody>
+            <tr><td>Rookie</td><td class="r num">20,000</td><td class="r num">220</td><td class="r num g-good">+18,000</td></tr>
+            <tr><td>Veteran</td><td class="r num">100,000</td><td class="r num">320</td><td class="r num g-good">+90,000</td></tr>
+            <tr><td>Legend</td><td class="r num">500,000</td><td class="r">none</td><td class="r num g-good">+460,000</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="g-block">
+        <h3>3 · PLAY A ROUND</h3>
+        <ol class="g-steps">
+          <li>You have <b>20 seconds</b>. Tap a card in your hand, then <b>Lock card</b>.</li>
+          <li>Your opponent does the same. Neither of you sees the other's card until both are locked.</li>
+          <li>Both cards <b>flip at the same time</b>. The higher <b>final power</b> wins the round. Equal power is a tie and nobody scores.</li>
+          <li>Each card can be played <b>only once</b> per match, so plan all 5 rounds.</li>
+          <li>Run out of time and a random card from your hand is played for you.</li>
+        </ol>
+      </div>
+
+      <div class="g-block">
+        <h3>4 · USE ELEMENTS (+30%)</h3>
+        <p class="cycle g-cycle"><span class="e e-fire">FIRE</span>›<span class="e e-wind">WIND</span>›<span class="e e-earth">EARTH</span>›<span class="e e-water">WATER</span>›<span class="e e-fire">FIRE</span></p>
+        <p>Each element beats the next one in the cycle: fire beats wind, wind beats earth, earth beats water, water beats fire. A card that beats its opponent's element gets <b>+30% power</b>. Every other pairing (fire vs earth, wind vs water, same element) is neutral.</p>
+        <p>During a match you can see the <b>elements</b> of your opponent's remaining cards as coloured squares under their name, but not which one they'll play. Cards in your hand show <b class="g-good">▲</b> when they beat more of those elements than they lose to, and <b class="g-bad">▼</b> when they're at risk.</p>
+      </div>
+
+      <div class="g-block">
+        <h3>5 · MANAGE YOUR 15 ENERGY</h3>
+        <p>Every match you start with <b>15 energy</b>. Playing a card spends its cost. If a card costs more than the energy you have left, it still plays, but <b>exhausted at half power</b> (and spends nothing).</p>
+        <p>Example: a deck with a legendary (6), an epic (4) and three rares (3+3+3) costs 19, four more than you have. One or two of those cards will play exhausted, so decide which round you can afford to weaken. A cheap deck of commons and rares never gets tired.</p>
+      </div>
+
+      <div class="g-block g-formula">
+        <h3>FINAL POWER</h3>
+        <p class="g-eq">Power <span>×1.3</span> if your element wins <span>×0.5</span> if exhausted</p>
+        <ul class="g-examples">
+          <li><b>Storm Eagle</b> (wind, 52) vs <b>Rock Tortoise</b> (earth, 30): wind beats earth, so 52 × 1.3 = <b>68</b> vs 30. Eagle wins.</li>
+          <li><b>Ember Fox</b> (fire, 28) vs <b>Frost Whale</b> (water, 50): water beats fire, so 28 vs 50 × 1.3 = <b>65</b>. Whale wins.</li>
+          <li><b>Ashborn Phoenix</b> (legendary, 94) played with only 4 energy left: exhausted, 94 × 0.5 = <b>47</b>. It loses to a Lava Golem (48).</li>
+        </ul>
+      </div>
+
+      <div class="g-block">
+        <h3>6 · ENTRY, POT AND FEES</h3>
+        <ul class="g-list">
+          <li>When you search for a match, your entry is <b>locked in escrow</b>. Cancel the search and it's refunded.</li>
+          <li>The winner gets the <b>pot</b> (both entries) minus a <b>5% house fee</b> (4% in the Legend room). Example in Rookie: pot 40,000, fee 2,000, you receive 38,000, a profit of 18,000.</li>
+          <li>The fee is split: <b>40% burned</b> (removed from supply), <b>40% treasury</b>, <b>20% season rewards</b>.</li>
+          <li>A drawn match refunds both entries with no fee.</li>
+        </ul>
+      </div>
+
+      <div class="g-block">
+        <h3>7 · GET MORE CARDS AND FLIP</h3>
+        <ul class="g-list">
+          <li>New players start with <b>200,000 FLIP</b>, <b>12 starter cards</b> and <b>2 free packs</b>.</li>
+          <li><b>Basic pack</b> (15,000 FLIP): 3 cards, mostly commons with a 1% legendary chance. <b>Premium pack</b> (60,000 FLIP): 3 cards, all rare or better, 7% legendary.</li>
+          <li>Claim a <b>daily bonus</b> of 25,000 FLIP every 24 hours from the Arena.</li>
+        </ul>
+      </div>
+
+      <div class="g-block">
+        <h3>8 · CLIMB THE LEADERBOARD</h3>
+        <p>Everyone starts at <b>1200 ELO</b>. Winning raises it and losing lowers it; beating a higher-rated player earns more. The RANKS tab lists all players by ELO for the season.</p>
+      </div>
+
+      <div class="g-block g-tips">
+        <h3>TIPS</h3>
+        <ul class="g-list">
+          <li>Watch their element squares. If only water is left on their side, your fire cards are in trouble.</li>
+          <li>Don't open with your legendary if that leaves your later cards exhausted.</li>
+          <li>Losing a round on purpose with a cheap card can save energy for a big win later.</li>
+          <li>If you close the page mid-match, open it again: you rejoin the match. While you're away, random cards play for you.</li>
+        </ul>
+      </div>
+
+      <p class="g-note">FLIP tokens and cards in this demo have no real-world value and are not on any blockchain.</p>
+    </div>
+  </details>
 
   <footer>Target network: Robinhood Chain (EVM L2). Tokens and cards are demo assets stored on this server. Nothing is sent on-chain.</footer>
 </div>

@@ -127,7 +127,22 @@ function emptySlot(t) { const d = document.createElement('div'); d.className = '
 // ---------- screens ----------
 const SCREENS = ['login', 'nickname', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'shop', 'ranks', 'history'];
 let current = null;
-function show(id) { if (current !== id) window.scrollTo({ top: 0 }); current = id; SCREENS.forEach(s => ($(s).hidden = s !== id)); }
+function show(id) {
+  if (current !== id) window.scrollTo({ top: 0 });
+  current = id; SCREENS.forEach(s => ($(s).hidden = s !== id));
+  $('guide').hidden = !(id === 'login' || id === 'arena');
+}
+// The guide opens by itself for players who haven't finished a match yet.
+let guideAutoOpened = false;
+function renderGuide() {
+  if (!S.cfg || $('guideCard').firstChild) return;
+  $('guideCard').appendChild(cardEl({ uid: 0, tpl: 10, name: 'Abyss Kraken', el: 'water', rar: 'epic', pow: 68, tid: '#0421' }, { static: true }));
+}
+function maybeOpenGuide() {
+  if (guideAutoOpened || !S.me) return;
+  guideAutoOpened = true;
+  if (S.me.wins + S.me.losses + S.me.draws === 0) $('guide').open = true;
+}
 function setTab(tab) {
   if (S.match) return;
   S.tab = tab;
@@ -210,6 +225,7 @@ $('nickForm').onsubmit = async e => {
 // ---------- boot ----------
 async function boot() {
   if (!S.cfg) S.cfg = await api('/api/config');
+  renderGuide();
   if (!S.token) return renderLogin();
   let me;
   try { me = await api('/api/me'); } catch (e) { return renderLogin(S.token ? e.message : ''); }
@@ -276,6 +292,7 @@ function renderArena() {
   updateTop(); renderRooms();
   $('bonusBox').hidden = S.me.bonusReadyIn > 0;
   show('arena');
+  maybeOpenGuide();
 }
 $('claim').onclick = async () => {
   try { const r = await api('/api/bonus', {}); S.me = r.profile; SFX.coin(); toast('+25,000 FLIP added.'); renderArena(); }
