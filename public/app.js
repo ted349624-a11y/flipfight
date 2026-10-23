@@ -135,11 +135,12 @@ function backEl() { const d = document.createElement('div'); d.className = 'back
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
 // ---------- screens ----------
-const SCREENS = ['login', 'nickname', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'shop', 'ranks', 'history'];
+const SCREENS = ['login', 'nickname', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'shop', 'ranks', 'history'];
 let current = null;
 function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
   current = id; SCREENS.forEach(s => ($(s).hidden = s !== id));
+  if (id !== 'forge') $('fgBar').hidden = true;
   $('guide').hidden = !(id === 'login' || id === 'arena');
 }
 // The guide opens by itself for players who haven't finished a match yet.
@@ -157,7 +158,7 @@ function setTab(tab) {
   if (S.match) return;
   S.tab = tab;
   [...$('tabs').children].forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ({ arena: renderArena, collection: renderCollection, shop: renderShop, ranks: renderRanks, history: renderHistory })[tab]();
+  ({ arena: renderArena, collection: renderCollection, forge: renderForge, shop: renderShop, ranks: renderRanks, history: renderHistory })[tab]();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { SFX.click(); setTab(b.dataset.tab); } };
 function lockTabs(on) { [...$('tabs').children].forEach(b => { b.disabled = on; b.style.opacity = on ? .45 : 1; }); }
@@ -568,6 +569,107 @@ async function renderCollection() {
   cs.filter(c => S.filter === 'all' || c.el === S.filter || c.rar === S.filter).forEach(c => g.appendChild(cardEl(c, { static: true, isNew: S.newUids.includes(c.uid) })));
   show('collection');
 }
+
+// ---------- forge (fusion) ----------
+let fgSel = [], fgBusy = false;
+const pct = p => (p * 100 >= 10 ? (p * 100).toFixed(0) : (p * 100).toFixed(1)) + '%';
+function fusionChance(rarity, n) {
+  const F = S.cfg.fusion, t = F.tiers[rarity];
+  if (!t || n < F.minCards || n > F.maxCards) return 0;
+  return 1 - Math.pow(1 - t.base, n - 1);
+}
+async function renderForge() {
+  show('forge');
+  try { await refreshMe(); } catch (e) {}
+  fgSel = fgSel.filter(byUid);
+  drawForge();
+}
+function drawForge() {
+  const F = S.cfg.fusion;
+  const picked = fgSel.map(byUid);
+  const rarity = picked.length ? picked[0].rar : null;
+  const tier = rarity && F.tiers[rarity];
+  const n = picked.length;
+  // slots
+  const slots = $('fgSlots'); slots.innerHTML = '';
+  for (let i = 0; i < F.maxCards; i++) {
+    const c = picked[i];
+    if (c) { const el = cardEl(c, { static: true }); el.classList.add('fg-in'); slots.appendChild(el); }
+    else { const e = emptySlot(i < F.minCards ? 'Card ' + (i + 1) : 'Optional +' + Math.round((tier ? tier.base : .4) * 100) + '%'); e.classList.add('fg-empty'); slots.appendChild(e); }
+  }
+  // odds
+  const p = tier ? fusionChance(rarity, n) : 0;
+  $('fgChance').textContent = tier && n >= F.minCards ? pct(p) : '–';
+  $('fgChance').style.color = !tier || n < F.minCards ? 'var(--muted)' : p >= .5 ? 'var(--good)' : p >= .25 ? 'var(--gold)' : 'var(--bad)';
+  if (tier) {
+    $('fgWin').innerHTML = `1 random <b style="color:${RAR_COLORS[tier.to]}">${rar(tier.to).name}</b> card`;
+    $('fgLose').innerHTML = `1 random <b style="color:${RAR_COLORS[rarity]}">${rar(rarity).name}</b> card back`;
+    $('fgFee').textContent = `${fmt(tier.fee)} FLIP (burned)`;
+  } else { $('fgWin').textContent = 'Pick cards to see the outcome.'; $('fgLose').textContent = '–'; $('fgFee').textContent = '–'; }
+  const keepOk = S.cards.length - n + 1 >= F.keepAtLeast;
+  const enough = !tier || S.me.balance >= tier.fee;
+  const ready = tier && n >= F.minCards && keepOk && enough && !fgBusy;
+  $('fgGo').disabled = !ready;
+  $('fgGo').textContent = tier && n >= F.minCards ? `Fuse ${n} cards · ${fmt(tier.fee)} FLIP` : 'Fuse';
+  $('fgClear').hidden = n === 0;
+  $('fgBar').hidden = n === 0 || current !== 'forge';
+  $('fgBarChance').textContent = $('fgChance').textContent; $('fgBarChance').style.color = $('fgChance').style.color;
+  $('fgBarText').textContent = tier ? `${n} ${rar(rarity).name.toLowerCase()} card${n > 1 ? 's' : ''} → ${rar(tier.to).name.toLowerCase()}` : '';
+  $('fgBarGo').disabled = $('fgGo').disabled; $('fgBarGo').textContent = n >= F.minCards ? `Fuse · ${fmt(tier.fee)}` : `Add ${F.minCards - n} more`;
+  $('fgNote').className = 'note' + ((!keepOk || !enough) ? ' warn' : '');
+  $('fgNote').textContent = !n ? 'Tap cards below. The first card you pick sets the rarity.'
+    : !keepOk ? `You need to keep at least ${F.keepAtLeast} cards for a deck. Remove a card or open a pack first.`
+    : !enough ? 'Not enough FLIP for this fusion.'
+    : n < F.minCards ? `Add ${F.minCards - n} more ${rar(rarity).name.toLowerCase()} card to fuse.`
+    : n < F.maxCards ? `Add another ${rar(rarity).name.toLowerCase()} card to raise the chance to ${pct(fusionChance(rarity, n + 1))}.`
+    : 'Maximum cards. Ready to fuse.';
+  // grid
+  const g = $('fgGrid'); g.innerHTML = '';
+  sortedCards().forEach(c => {
+    const on = fgSel.includes(c.uid);
+    const fusable = !!F.tiers[c.rar];
+    const fits = !rarity || c.rar === rarity;
+    const el = cardEl(c);
+    if (on) el.classList.add('sel');
+    if (!on && (!fusable || !fits || n >= F.maxCards)) { el.classList.add('dim'); el.disabled = true; el.title = !fusable ? 'Legendary cards cannot be fused' : !fits ? 'All cards must have the same rarity' : 'Maximum 4 cards'; }
+    el.setAttribute('aria-pressed', on);
+    el.onclick = () => { if (fgBusy) return; fgSel = on ? fgSel.filter(x => x !== c.uid) : fgSel.concat(c.uid); SFX.click(); $('fgReveal').hidden = true; drawForge(); };
+    g.appendChild(el);
+  });
+  // odds table
+  $('fgTable').innerHTML = `<thead><tr><th>Fuse</th>${[2, 3, 4].map(k => `<th class="r">${k} cards</th>`).join('')}<th class="r">Fee</th></tr></thead><tbody>` +
+    Object.entries(F.tiers).map(([r, t]) => `<tr><td><span style="color:${RAR_COLORS[r]}">${rar(r).name}</span> → <span style="color:${RAR_COLORS[t.to]}">${rar(t.to).name}</span></td>${[2, 3, 4].map(k => `<td class="r num">${pct(fusionChance(r, k))}</td>`).join('')}<td class="r num">${fmt(t.fee)}</td></tr>`).join('') + '</tbody>';
+}
+$('fgClear').onclick = () => { fgSel = []; SFX.click(); drawForge(); };
+$('fgBarGo').onclick = () => { $('forge').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' }); $('fgGo').click(); };
+$('fgGo').onclick = async () => {
+  if (fgBusy) return;
+  fgBusy = true; drawForge(); SFX.lock();
+  let res;
+  try { res = await api('/api/fuse', { uids: fgSel }); }
+  catch (e) { fgBusy = false; toast(e.message); drawForge(); return; }
+  // fusion animation: the cards in the slots shake and burn away
+  const ins = [...$('fgSlots').querySelectorAll('.fg-in')];
+  ins.forEach(el => el.classList.add('fg-shake'));
+  for (let i = 0; i < 6; i++) beep(300 + i * 90, .07, 'square', .04, 0, i * .09);
+  await sleep(900);
+  ins.forEach(el => el.classList.add('fg-burn'));
+  await sleep(450);
+  S.me = res.profile; updateTop();
+  try { await refreshMe(); } catch (e) {}
+  fgSel = []; fgBusy = false; drawForge();
+  const rv = $('fgReveal'); rv.hidden = false;
+  rv.classList.toggle('fg-win', res.success); rv.classList.toggle('fg-lose', !res.success);
+  $('fgRevealTitle').textContent = res.success ? 'FUSION SUCCESS!' : 'FUSION FAILED';
+  const card = cardEl(res.card, { static: true, isNew: true }); card.classList.add('flip');
+  if (res.success) card.classList.add('flash');
+  $('fgRevealCard').replaceChildren(card);
+  $('fgRevealNote').textContent = res.success
+    ? `Your ${res.consumed.length} ${rar(res.rarity).name.toLowerCase()} cards became ${res.card.name}. The chance was ${pct(res.chance)}.`
+    : `The ${pct(res.chance)} roll missed. You got ${res.card.name} back.`;
+  res.success ? (res.card.rar === 'legendary' ? SFX.legend() : SFX.win()) : SFX.lose();
+  rv.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+};
 
 // ---------- shop ----------
 const PACK_EL = { basic: 'earth', premium: 'fire' };

@@ -354,3 +354,35 @@ body{background:transparent}
 .pc-text span{font-size:19px;color:var(--muted)}
 @keyframes pcPulse{50%{--b:var(--gold-d)}}
 @media (prefers-reduced-motion:reduce){.pickcall{animation:none}}
+
+/* ---------- forge ---------- */
+.forge-panel{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;padding:18px;align-items:start}
+.fg-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;justify-items:center}
+.fg-slots .card{width:100%;max-width:120px;margin:4px}
+.fg-slots .empty.fg-empty{width:100%;max-width:120px;height:auto;aspect-ratio:132/212;font-size:16px}
+.fg-odds{display:flex;flex-direction:column;gap:12px;min-width:0}
+.fg-chance{display:flex;flex-direction:column;gap:4px}
+.fg-chance span{font-family:var(--font-px);font-size:34px;line-height:1.2}
+.fg-chance small{font-family:var(--font-px);font-size:8px;color:var(--muted);letter-spacing:.08em}
+.fg-out{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:19px}
+.fg-out dt{font-family:var(--font-px);font-size:8px;padding-top:6px;color:var(--muted)}
+.fg-out dd{margin:0}
+.fg-out b{font-weight:400}
+.fg-table-box{padding:14px 18px}
+.fg-table-box .g-table{min-width:0}
+.fg-shake{animation:fgShake .12s steps(2) infinite}
+@keyframes fgShake{0%{transform:translate(-2px,0)}50%{transform:translate(2px,-1px)}100%{transform:translate(-1px,1px)}}
+.fg-burn{animation:fgBurn .45s steps(4) forwards}
+@keyframes fgBurn{to{transform:scale(.2);opacity:0;filter:brightness(2.5) saturate(0)}}
+.reveal.fg-win{--b:var(--good)}
+.reveal.fg-lose{--b:var(--bad)}
+.reveal.fg-win h2{color:var(--good)}
+.reveal.fg-lose h2{color:var(--bad)}
+@media (max-width:760px){.forge-panel{grid-template-columns:1fr}}
+@media (max-width:420px){.fg-chance span{font-size:28px}}
+.fg-bar{position:fixed;left:0;right:0;bottom:0;z-index:15;display:flex;align-items:center;gap:12px;background:var(--panel);
+  box-shadow:0 -4px 0 0 var(--gold);padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.fg-bar-chance{font-family:var(--font-px);font-size:18px}
+.fg-bar-text{flex:1;min-width:0;font-size:19px;color:var(--muted)}
+.fg-bar .btn{margin:4px;padding:10px 12px;font-size:10px}
+#forge{padding-bottom:84px}

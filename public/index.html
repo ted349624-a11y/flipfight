@@ -55,6 +55,7 @@
   <nav class="tabs" role="tablist" id="tabs" hidden>
     <button role="tab" data-tab="arena" aria-selected="true">ARENA</button>
     <button role="tab" data-tab="collection" aria-selected="false">COLLECTION</button>
+    <button role="tab" data-tab="forge" aria-selected="false">FORGE</button>
     <button role="tab" data-tab="shop" aria-selected="false">SHOP</button>
     <button role="tab" data-tab="ranks" aria-selected="false">RANKS</button>
     <button role="tab" data-tab="history" aria-selected="false">HISTORY</button>
@@ -154,6 +155,46 @@
     <div class="frame collstats" id="collStats"></div>
     <div class="filters" id="filters"></div>
     <div class="cards" id="collGrid"></div>
+  </section>
+
+  <!-- FORGE -->
+  <section id="forge" hidden>
+    <div class="intro">
+      <h2>Forge</h2>
+      <p class="note">Fuse 2–4 cards of the same rarity for a chance at one card of the next rarity.</p>
+    </div>
+    <div class="frame forge-panel">
+      <div class="fg-slots" id="fgSlots"></div>
+      <div class="fg-odds">
+        <div class="fg-chance"><span class="num" id="fgChance">–</span><small>SUCCESS CHANCE</small></div>
+        <dl class="fg-out">
+          <dt class="g-good">Success</dt><dd id="fgWin">Pick cards to see the outcome.</dd>
+          <dt class="g-bad">Failure</dt><dd id="fgLose">–</dd>
+          <dt>Fee</dt><dd id="fgFee">–</dd>
+        </dl>
+        <div class="row" style="gap:8px">
+          <button class="btn" type="button" id="fgGo" disabled>Fuse</button>
+          <button class="btn ghost" type="button" id="fgClear" hidden>Clear</button>
+        </div>
+        <p class="note" id="fgNote">Tap cards below. The first card you pick sets the rarity.</p>
+      </div>
+    </div>
+    <div class="frame reveal" id="fgReveal" hidden>
+      <h2 id="fgRevealTitle"></h2>
+      <div class="cards" id="fgRevealCard"></div>
+      <p class="note" id="fgRevealNote"></p>
+    </div>
+    <div class="cards" id="fgGrid"></div>
+    <div class="fg-bar" id="fgBar" hidden>
+      <span class="fg-bar-chance num" id="fgBarChance"></span>
+      <span class="fg-bar-text" id="fgBarText"></span>
+      <button class="btn" type="button" id="fgBarGo">Fuse</button>
+    </div>
+    <details class="frame howto fg-table-box">
+      <summary>Odds and costs</summary>
+      <div class="tblwrap"><table class="g-table" id="fgTable"></table></div>
+      <p class="note" style="margin-top:10px">Each card after the first is an extra, independent roll at the base chance: <b class="gold">chance = 1 − (1 − base)<sup>cards − 1</sup></b>. More cards make success likelier but use up more cards. Every fusion consumes the cards you put in; on failure you get one random card of the same rarity back. The fee is burned.</p>
+    </details>
   </section>
 
   <!-- SHOP -->
@@ -278,7 +319,20 @@
       </div>
 
       <div class="g-block">
-        <h3>8 · CLIMB THE LEADERBOARD</h3>
+        <h3>8 · FUSE CARDS IN THE FORGE</h3>
+        <p>Put <b>2–4 cards of the same rarity</b> into the Forge and pay a small fee. You either get <b>one card of the next rarity</b> or, if the fusion fails, <b>one random card of the same rarity</b> back. Your input cards are used up either way.</p>
+        <div class="tblwrap"><table class="g-table">
+          <thead><tr><th>Fuse</th><th class="r">2 cards</th><th class="r">3</th><th class="r">4</th><th class="r">Fee</th></tr></thead>
+          <tbody>
+            <tr><td>Common → Rare</td><td class="r num">40%</td><td class="r num">64%</td><td class="r num">78%</td><td class="r num">5,000</td></tr>
+            <tr><td>Rare → Epic</td><td class="r num">25%</td><td class="r num">44%</td><td class="r num">58%</td><td class="r num">20,000</td></tr>
+            <tr><td>Epic → Legendary</td><td class="r num">12%</td><td class="r num">23%</td><td class="r num">32%</td><td class="r num">60,000</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="g-block">
+        <h3>9 · CLIMB THE LEADERBOARD</h3>
         <p>Everyone starts at <b>1200 ELO</b>. Winning raises it and losing lowers it; beating a higher-rated player earns more. The RANKS tab lists all players by ELO for the season.</p>
       </div>
 

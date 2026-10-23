@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS matches (
 CREATE INDEX IF NOT EXISTS matches_p1 ON matches(p1);
 CREATE INDEX IF NOT EXISTS matches_p2 ON matches(p2);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS fusions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  rarity TEXT NOT NULL,
+  cards_used INTEGER NOT NULL,
+  chance REAL NOT NULL,
+  success BOOLEAN NOT NULL,
+  result_tpl INTEGER NOT NULL,
+  fee BIGINT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fusions_user ON fusions(user_id);
 `;
 
 const init = () => pool.query(SCHEMA);

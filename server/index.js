@@ -190,7 +190,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
-  res.json({ practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
+  res.json({ fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {
@@ -258,6 +258,52 @@ app.post('/api/pack', auth, route(async (req, res) => {
   } catch (e) { return fail(res, 400, e.message); }
   const all = await ownedCards(req.user.id);
   res.json({ pulled: all.filter(c => uids.includes(c.uid)), profile: publicProfile(await q.userById(req.user.id)) });
+}));
+
+// ---------- fusion (the Forge) ----------
+app.post('/api/fuse', auth, route(async (req, res) => {
+  const uids = req.body.uids;
+  const F = G.FUSION;
+  if (!Array.isArray(uids) || uids.length < F.minCards || uids.length > F.maxCards || !uids.every(Number.isInteger))
+    return fail(res, 400, `Choose ${F.minCards} to ${F.maxCards} cards to fuse.`);
+  if (new Set(uids).size !== uids.length) return fail(res, 400, 'Each card can only be used once.');
+  if (matchmaker.isBusy(req.user.id)) return fail(res, 400, 'Finish your match or cancel your search before fusing.');
+  let out;
+  try {
+    out = await db.tx(async c => {
+      // lock the player's cards so two fusions can't use the same card
+      const owned = await db.all('SELECT uid, tpl FROM cards WHERE owner_id = $1 FOR UPDATE', [req.user.id], c);
+      const used = uids.map(u => owned.find(o => o.uid === u));
+      if (used.some(x => !x)) throw new Error('You no longer own one of these cards.');
+      const rarities = new Set(used.map(x => G.TEMPLATES[x.tpl][2]));
+      if (rarities.size !== 1) throw new Error('All cards in a fusion must have the same rarity.');
+      const rarity = [...rarities][0];
+      const tier = F.tiers[rarity];
+      if (!tier) throw new Error('Legendary cards are already the highest rarity.');
+      if (owned.length - uids.length + 1 < F.keepAtLeast) throw new Error(`You need to keep at least ${F.keepAtLeast} cards for a deck.`);
+      if (!(await q.spendBalance(req.user.id, tier.fee, c))) throw new Error(`Not enough FLIP. This fusion costs ${tier.fee.toLocaleString('en-US')} FLIP.`);
+      await db.addStat('burned', tier.fee, c);
+      await db.query('DELETE FROM cards WHERE owner_id = $1 AND uid = ANY($2::int[])', [req.user.id, uids], c);
+      await db.query('DELETE FROM decks WHERE user_id = $1', [req.user.id], c); // old saved decks may reference fused cards
+      const chance = G.fusionChance(rarity, uids.length);
+      const success = crypto.randomInt(0, 1000000) < Math.round(chance * 1000000);
+      const resultRarity = success ? tier.to : rarity;
+      const pool = G.TEMPLATES.map((t, i) => i).filter(i => G.TEMPLATES[i][2] === resultRarity);
+      const tpl = pool[crypto.randomInt(0, pool.length)];
+      const card = await q.insertCard(req.user.id, tpl, c);
+      await db.query(`INSERT INTO fusions(user_id, rarity, cards_used, chance, success, result_tpl, fee, created_at)
+                      VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [req.user.id, rarity, uids.length, chance, success, tpl, tier.fee, now()], c);
+      return { success, chance, rarity, resultUid: card.uid, fee: tier.fee };
+    });
+  } catch (e) { return fail(res, 400, e.message); }
+  const cards = await ownedCards(req.user.id);
+  res.json({ ...out, card: cards.find(x => x.uid === out.resultUid), consumed: uids, profile: publicProfile(await q.userById(req.user.id)) });
+}));
+
+app.get('/api/fusion-stats', route(async (req, res) => {
+  const rows = await db.all(`SELECT rarity, cards_used, COUNT(*)::int AS tries, SUM(CASE WHEN success THEN 1 ELSE 0 END)::int AS wins
+                             FROM fusions GROUP BY rarity, cards_used ORDER BY rarity, cards_used`);
+  res.json({ stats: rows });
 }));
 
 app.get('/api/leaderboard', route(async (req, res) => {
