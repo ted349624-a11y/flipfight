@@ -29,6 +29,8 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+// Tolerate doubled slashes in typed URLs (e.g. "site.com//healthz").
+app.use((req, res, next) => { if (req.url.includes('//')) req.url = req.url.replace(/\/{2,}/g, '/'); next(); });
 app.use(express.json({ limit: '20kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -116,12 +118,19 @@ function normalizeAddress(a) { try { return getAddress(String(a)).toLowerCase();
 app.get('/api/nonce', route(async (req, res) => {
   const address = normalizeAddress(req.query.address);
   if (!address) return fail(res, 400, 'That is not a valid wallet address.');
+  // Sign-In with Ethereum (EIP-4361) format, so wallets can verify the site's domain.
+  const host = req.get('host');
   const message = [
-    'Sign in to Flipfight', '',
-    `Wallet: ${getAddress(address)}`,
-    `Nonce: ${crypto.randomBytes(16).toString('hex')}`,
-    `Issued: ${new Date().toISOString()}`, '',
-    'This signature is free. It does not send a transaction or move any tokens.',
+    `${host} wants you to sign in with your Ethereum account:`,
+    getAddress(address),
+    '',
+    'Sign in to Flipfight. This signature is free. It does not send a transaction or move any tokens.',
+    '',
+    `URI: ${req.protocol}://${host}`,
+    'Version: 1',
+    `Chain ID: ${G.CHAIN_ID}`,
+    `Nonce: ${crypto.randomBytes(12).toString('hex')}`,
+    `Issued At: ${new Date().toISOString()}`,
   ].join('\n');
   await db.query(`INSERT INTO nonces(address, message, expires_at) VALUES($1,$2,$3)
     ON CONFLICT(address) DO UPDATE SET message = EXCLUDED.message, expires_at = EXCLUDED.expires_at`, [address, message, now() + NONCE_MS]);

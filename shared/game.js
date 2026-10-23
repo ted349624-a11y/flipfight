@@ -47,6 +47,8 @@ const ECONOMY = {
   feeSplit: { burn: 0.4, treasury: 0.4, season: 0.2 },
 };
 
+const CHAIN_ID = 4663; // Robinhood Chain mainnet (sign-in messages only; nothing is sent on-chain)
+
 const MATCH = { energy: 15, rounds: 5, winsNeeded: 3, turnMs: 20000, revealMs: 2600, deckSize: 5 };
 
 function cardView(row) {
@@ -59,4 +61,4 @@ function effectivePower(card, exhausted, vsElement) {
   return Math.round(card.pow * elementBonus * (exhausted ? 0.5 : 1));
 }
 
-module.exports = { ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
