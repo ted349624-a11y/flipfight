@@ -12,6 +12,7 @@ Pixel art NFT kart düellosu. Oyuncular MetaMask ile giriş yapar, takma ad seç
 - **Ekonomi:** Giriş tutarı maç başında kilitlenir, kazanan havuzu alır. %5 komisyonun %40'ı yakılır, %40'ı hazineye, %20'si sezon havuzuna gider. Paket fiyatının yarısı yakılır.
 - **Lider tablosu ve geçmiş:** ELO (K=32) sıralaması, galibiyet/mağlubiyet/beraberlik, çevrim içi oyuncu sayısı, son 20 maç.
 - **Günlük bonus:** 24 saatte bir 25.000 FLIP.
+- **Market (gerçek zamanlı pazar yeri):** Oyuncular kartlarını FLIP karşılığı listeler; yeni ilanlar, satışlar ve iptaller Socket.io ile herkese anında yansır, satıcıya satış bildirimi gider. Alıcı fiyatı öder, satıcı %5 komisyon düşülmüş tutarı alır (yarısı yakılır, yarısı hazineye). Satın alma tek bir atomik işlemle yapılır; aynı kartı iki kişi aynı anda alamaz. Listelenen kart destede ve Forge'da kullanılamaz; oyuncu en az 5 listelenmemiş kartla kalır, en fazla 20 ilan açabilir.
 - **Forge (kart birleştirme):** Aynı nadirlikte 2-4 kart birleştirilir. Başarı şansı `1 − (1 − taban)^(kart − 1)`; tabanlar common→rare %40, rare→epic %25, epic→legendary %12. Başarıda bir üst nadirlikte rastgele kart, başarısızlıkta aynı nadirlikte rastgele bir kart geri gelir; kullanılan kartlar her durumda harcanır ve ücret (5.000 / 20.000 / 60.000 FLIP) yakılır. Oyuncu en az 5 kartla kalır. Oranlar ve beklenen maliyetler: `node scripts/fusion-sim.js`.
 - **Bota karşı antrenman:** Ücretsiz, her zaman açık; FLIP, ELO ve maç geçmişini etkilemez. Easy, Normal ve Hard seviyeleri var; bot senin destenin aynısıyla oynar (ayna maç), sonucu sadece hamleler belirler.
 
@@ -35,6 +36,7 @@ node scripts/practice-test.js http://localhost:3000   # bota karşı antrenman
 node scripts/bot-sim.js                               # bot seviyelerinin kazanma oranları (sunucu gerekmez)
 node scripts/fusion-sim.js                            # birleştirme oranları ve beklenen maliyetler (sunucu gerekmez)
 node scripts/fusion-test.js http://localhost:3000     # birleştirme kuralları ve hata durumları
+node scripts/market-test.js http://localhost:3000     # pazar yeri: kurallar, canlı olaylar, iki alıcının yarışı
 ```
 
 "Coming soon" açıkken test betiklerine önizleme anahtarını ikinci argüman olarak ver.

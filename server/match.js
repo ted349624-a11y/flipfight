@@ -307,6 +307,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile }) {
     onConnection,
     onlineCount: () => sockets.size,
     activeMatchOf: userId => userMatch.get(userId) || null,
+    notify: (userId, ev, data) => emitTo(userId, ev, data),
     isBusy: userId => userMatch.has(userId) || userQueue.has(userId) || busy.has(userId),
   };
 }

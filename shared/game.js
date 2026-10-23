@@ -66,6 +66,16 @@ function fusionChance(rarity, n) {
   return 1 - Math.pow(1 - t.base, n - 1);
 }
 
+// Marketplace: players list cards for FLIP. The buyer pays the price; the seller receives it minus a 5% fee
+// (half burned, half to the treasury). Listed cards can't be used in decks or the Forge until the listing is cancelled.
+const MARKET = {
+  fee: 0.05,
+  minPrice: 1000,
+  maxPrice: 100000000,
+  maxListings: 20,
+  suggested: { common: 8000, rare: 30000, epic: 90000, legendary: 300000 },
+};
+
 const PACKS = [
   { id: 'basic', name: 'BASIC PACK', price: 15000, n: 3, odds: { common: 70, rare: 22, epic: 7, legendary: 1 } },
   { id: 'premium', name: 'PREMIUM PACK', price: 60000, n: 3, odds: { common: 0, rare: 65, epic: 28, legendary: 7 } },
@@ -94,4 +104,4 @@ function effectivePower(card, exhausted, vsElement) {
   return Math.round(card.pow * elementBonus * (exhausted ? 0.5 : 1));
 }
 
-module.exports = { FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

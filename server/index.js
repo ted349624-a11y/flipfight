@@ -79,7 +79,8 @@ const route = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catc
 const q = {
   userById: (id, c) => db.one('SELECT * FROM users WHERE id = $1', [id], c),
   userByAddress: a => db.one('SELECT * FROM users WHERE address = $1', [a]),
-  cardsOf: (id, c) => db.all('SELECT uid, tpl, token_no FROM cards WHERE owner_id = $1 ORDER BY uid', [id], c),
+  cardsOf: (id, c) => db.all(`SELECT c.uid, c.tpl, c.token_no, l.id AS listing_id, l.price AS listing_price FROM cards c
+      LEFT JOIN listings l ON l.card_uid = c.uid AND l.status = 'active' WHERE c.owner_id = $1 ORDER BY c.uid`, [id], c),
   insertCard: (owner, tpl, c) => db.one('INSERT INTO cards(owner_id, tpl, token_no, created_at) VALUES($1,$2,$3,$4) RETURNING uid', [owner, tpl, randomTokenNo(), now()], c),
   upsertDeck: (uid, room, uids, c) => db.query(`INSERT INTO decks(user_id, room_id, card_uids) VALUES($1,$2,$3)
       ON CONFLICT(user_id, room_id) DO UPDATE SET card_uids = EXCLUDED.card_uids`, [uid, room, JSON.stringify(uids)], c),
@@ -108,7 +109,7 @@ function publicProfile(u) {
     bonusReadyIn: Math.max(0, u.last_bonus + G.ECONOMY.dailyBonusMs - now()),
   };
 }
-const ownedCards = async userId => (await q.cardsOf(userId)).map(G.cardView);
+const ownedCards = async userId => (await q.cardsOf(userId)).map(r => Object.assign(G.cardView(r), r.listing_id ? { listingId: r.listing_id, listPrice: r.listing_price } : {}));
 async function decksOf(userId) {
   const out = {};
   for (const d of await db.all('SELECT room_id, card_uids FROM decks WHERE user_id = $1', [userId])) out[d.room_id] = JSON.parse(d.card_uids);
@@ -124,6 +125,7 @@ async function validateDeck(userId, roomId, uids) {
   const owned = new Map((await ownedCards(userId)).map(c => [c.uid, c]));
   const cards = uids.map(u => owned.get(u));
   if (cards.some(c => !c)) throw new Error('You do not own one of these cards.');
+  if (cards.some(c => c.listingId)) throw new Error('One of these cards is listed on the Market. Cancel the listing to use it.');
   const power = cards.reduce((a, c) => a + c.pow, 0);
   if (room.limit !== null && power > room.limit) throw new Error(`Deck power ${power} is over the room cap of ${room.limit}.`);
   return { room, cards };
@@ -190,7 +192,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
-  res.json({ fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
+  res.json({ market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit } });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {
@@ -272,15 +274,17 @@ app.post('/api/fuse', auth, route(async (req, res) => {
   try {
     out = await db.tx(async c => {
       // lock the player's cards so two fusions can't use the same card
-      const owned = await db.all('SELECT uid, tpl FROM cards WHERE owner_id = $1 FOR UPDATE', [req.user.id], c);
+      const owned = await db.all(`SELECT c.uid, c.tpl, l.id AS listing_id FROM cards c LEFT JOIN listings l ON l.card_uid = c.uid AND l.status = 'active'
+                                  WHERE c.owner_id = $1 FOR UPDATE OF c`, [req.user.id], c);
       const used = uids.map(u => owned.find(o => o.uid === u));
       if (used.some(x => !x)) throw new Error('You no longer own one of these cards.');
+      if (used.some(x => x.listing_id)) throw new Error('One of these cards is listed on the Market. Cancel the listing first.');
       const rarities = new Set(used.map(x => G.TEMPLATES[x.tpl][2]));
       if (rarities.size !== 1) throw new Error('All cards in a fusion must have the same rarity.');
       const rarity = [...rarities][0];
       const tier = F.tiers[rarity];
       if (!tier) throw new Error('Legendary cards are already the highest rarity.');
-      if (owned.length - uids.length + 1 < F.keepAtLeast) throw new Error(`You need to keep at least ${F.keepAtLeast} cards for a deck.`);
+      if (owned.filter(x => !x.listing_id).length - uids.length + 1 < F.keepAtLeast) throw new Error(`You need to keep at least ${F.keepAtLeast} cards for a deck.`);
       if (!(await q.spendBalance(req.user.id, tier.fee, c))) throw new Error(`Not enough FLIP. This fusion costs ${tier.fee.toLocaleString('en-US')} FLIP.`);
       await db.addStat('burned', tier.fee, c);
       await db.query('DELETE FROM cards WHERE owner_id = $1 AND uid = ANY($2::int[])', [req.user.id, uids], c);
@@ -304,6 +308,96 @@ app.get('/api/fusion-stats', route(async (req, res) => {
   const rows = await db.all(`SELECT rarity, cards_used, COUNT(*)::int AS tries, SUM(CASE WHEN success THEN 1 ELSE 0 END)::int AS wins
                              FROM fusions GROUP BY rarity, cards_used ORDER BY rarity, cards_used`);
   res.json({ stats: rows });
+}));
+
+// ---------- marketplace ----------
+const M = G.MARKET;
+const listingView = (r, me) => ({
+  id: r.id, price: r.price, createdAt: r.created_at, seller: r.seller_name, mine: me != null && r.seller_id === me,
+  card: G.cardView({ uid: r.card_uid, tpl: r.tpl, token_no: r.token_no }),
+});
+const LISTING_SQL = `SELECT l.*, u.nickname AS seller_name, c.token_no FROM listings l
+                     JOIN users u ON u.id = l.seller_id JOIN cards c ON c.uid = l.card_uid`;
+async function marketBroadcast(kind, listingId, extra) {
+  // everyone with the game open gets the change live
+  const row = await db.one(`${LISTING_SQL} WHERE l.id = $1`, [listingId]);
+  io.emit('market:update', { kind, listing: row && listingView(row, null), ...extra });
+}
+
+app.get('/api/market', auth, route(async (req, res) => {
+  const rows = await db.all(`${LISTING_SQL} WHERE l.status = 'active' ORDER BY l.created_at DESC LIMIT 500`);
+  const sales = await db.all(`${LISTING_SQL} WHERE l.status = 'sold' ORDER BY l.closed_at DESC LIMIT 15`);
+  const avg = await db.all(`SELECT tpl, ROUND(AVG(price))::bigint AS avg, COUNT(*)::int AS n FROM
+                            (SELECT tpl, price, ROW_NUMBER() OVER (PARTITION BY tpl ORDER BY closed_at DESC) AS k FROM listings WHERE status = 'sold') t
+                            WHERE k <= 10 GROUP BY tpl`);
+  res.json({
+    listings: rows.map(r => listingView(r, req.user.id)),
+    recent: sales.map(r => ({ ...listingView(r, req.user.id), soldAt: r.closed_at })),
+    avgPrice: Object.fromEntries(avg.map(a => [a.tpl, { avg: a.avg, n: a.n }])),
+  });
+}));
+
+app.post('/api/market/list', auth, route(async (req, res) => {
+  const uid = Number(req.body.uid), price = Math.round(Number(req.body.price));
+  if (!Number.isFinite(price) || price < M.minPrice || price > M.maxPrice)
+    return fail(res, 400, `Set a price between ${M.minPrice.toLocaleString('en-US')} and ${M.maxPrice.toLocaleString('en-US')} FLIP.`);
+  if (matchmaker.isBusy(req.user.id)) return fail(res, 400, 'Finish your match or cancel your search before listing cards.');
+  let id;
+  try {
+    id = await db.tx(async c => {
+      const owned = await db.all(`SELECT c.uid, c.tpl, l.id AS listing_id FROM cards c LEFT JOIN listings l ON l.card_uid = c.uid AND l.status = 'active'
+                                  WHERE c.owner_id = $1 FOR UPDATE OF c`, [req.user.id], c);
+      const card = owned.find(x => x.uid === uid);
+      if (!card) throw new Error('You do not own this card.');
+      if (card.listing_id) throw new Error('This card is already listed.');
+      const listed = owned.filter(x => x.listing_id).length;
+      if (listed >= M.maxListings) throw new Error(`You can have at most ${M.maxListings} cards listed at once.`);
+      if (owned.length - listed - 1 < G.FUSION.keepAtLeast) throw new Error(`Keep at least ${G.FUSION.keepAtLeast} unlisted cards so you can still build a deck.`);
+      return (await db.one(`INSERT INTO listings(seller_id, card_uid, tpl, price, created_at) VALUES($1,$2,$3,$4,$5) RETURNING id`,
+        [req.user.id, uid, card.tpl, price, now()], c)).id;
+    });
+  } catch (e) { return fail(res, 400, e.message); }
+  await marketBroadcast('listed', id);
+  res.json({ ok: true, listingId: id });
+}));
+
+app.post('/api/market/cancel', auth, route(async (req, res) => {
+  const r = await db.query(`UPDATE listings SET status = 'cancelled', closed_at = $1 WHERE id = $2 AND seller_id = $3 AND status = 'active'`,
+    [now(), Number(req.body.listingId), req.user.id]);
+  if (!r.rowCount) return fail(res, 400, 'This listing is no longer active.');
+  await marketBroadcast('cancelled', Number(req.body.listingId));
+  res.json({ ok: true });
+}));
+
+app.post('/api/market/buy', auth, route(async (req, res) => {
+  const listingId = Number(req.body.listingId);
+  let sale;
+  try {
+    sale = await db.tx(async c => {
+      // claiming the listing is atomic: only one buyer can ever flip it from active to sold
+      const l = await db.one(`UPDATE listings SET status = 'sold', buyer_id = $1, closed_at = $2
+                              WHERE id = $3 AND status = 'active' AND seller_id <> $1 RETURNING *`, [req.user.id, now(), listingId], c);
+      if (!l) {
+        const x = await db.one('SELECT seller_id, status FROM listings WHERE id = $1', [listingId], c);
+        throw new Error(x && x.seller_id === req.user.id && x.status === 'active' ? 'You cannot buy your own card.' : 'Someone else just bought this card, or it was taken off the market.');
+      }
+      if (!(await q.spendBalance(req.user.id, l.price, c))) throw new Error('Not enough FLIP to buy this card.');
+      const moved = await db.query('UPDATE cards SET owner_id = $1 WHERE uid = $2 AND owner_id = $3', [req.user.id, l.card_uid, l.seller_id], c);
+      if (moved.rowCount !== 1) throw new Error('This card is no longer available.');
+      const fee = Math.round(l.price * M.fee);
+      await q.addBalance(l.seller_id, l.price - fee, c);
+      await db.addStat('burned', fee / 2, c);
+      await db.addStat('treasury', fee / 2, c);
+      await db.addStat('market_volume', l.price, c);
+      return { ...l, fee };
+    });
+  } catch (e) { return fail(res, 400, e.message); }
+  const buyer = await q.userById(req.user.id);
+  const card = G.cardView({ uid: sale.card_uid, tpl: sale.tpl, token_no: 0 });
+  await marketBroadcast('sold', listingId, { buyer: buyer.nickname });
+  const seller = await q.userById(sale.seller_id);
+  matchmaker.notify(sale.seller_id, 'market:sold', { card: card.name, price: sale.price, received: sale.price - sale.fee, buyer: buyer.nickname, profile: publicProfile(seller) });
+  res.json({ ok: true, card: (await ownedCards(req.user.id)).find(x => x.uid === sale.card_uid), price: sale.price, profile: publicProfile(buyer) });
 }));
 
 app.get('/api/leaderboard', route(async (req, res) => {

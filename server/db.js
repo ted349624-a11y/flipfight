@@ -79,6 +79,19 @@ CREATE TABLE IF NOT EXISTS fusions (
   created_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS fusions_user ON fusions(user_id);
+CREATE TABLE IF NOT EXISTS listings (
+  id SERIAL PRIMARY KEY,
+  seller_id INTEGER NOT NULL REFERENCES users(id),
+  card_uid INTEGER NOT NULL REFERENCES cards(uid),
+  tpl INTEGER NOT NULL,
+  price BIGINT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  buyer_id INTEGER REFERENCES users(id),
+  created_at BIGINT NOT NULL,
+  closed_at BIGINT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS listings_one_active_per_card ON listings(card_uid) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS listings_status ON listings(status, created_at);
 `;
 
 const init = () => pool.query(SCHEMA);

@@ -54,6 +54,7 @@
   <nav class="tabs" role="tablist" id="tabs" hidden>
     <button role="tab" data-tab="arena" aria-selected="true">ARENA</button>
     <button role="tab" data-tab="collection" aria-selected="false">COLLECTION</button>
+    <button role="tab" data-tab="market" aria-selected="false">MARKET</button>
     <button role="tab" data-tab="forge" aria-selected="false">FORGE</button>
     <button role="tab" data-tab="shop" aria-selected="false">SHOP</button>
     <button role="tab" data-tab="ranks" aria-selected="false">RANKS</button>
@@ -154,6 +155,21 @@
     <div class="frame collstats" id="collStats"></div>
     <div class="filters" id="filters"></div>
     <div class="cards" id="collGrid"></div>
+  </section>
+
+  <!-- MARKET -->
+  <section id="market" hidden>
+    <div class="intro">
+      <h2>Market <span class="mk-live">● LIVE</span></h2>
+      <p class="note" id="mkCount"></p>
+    </div>
+    <div class="mk-tabs" id="mkTabs" role="tablist">
+      <button type="button" role="tab" data-v="buy" aria-selected="true">BUY</button>
+      <button type="button" role="tab" data-v="sell" aria-selected="false">SELL</button>
+      <button type="button" role="tab" data-v="mine" aria-selected="false">MY LISTINGS<span id="mkMineCount"></span></button>
+      <button type="button" role="tab" data-v="recent" aria-selected="false">RECENT SALES</button>
+    </div>
+    <div id="mkBody"></div>
   </section>
 
   <!-- FORGE -->
@@ -331,7 +347,12 @@
       </div>
 
       <div class="g-block">
-        <h3>9 · CLIMB THE LEADERBOARD</h3>
+        <h3>9 · TRADE ON THE MARKET</h3>
+        <p>List any card for a price in FLIP. Other players see it <b>live</b> and can buy it instantly. When it sells, the card moves to the buyer and you receive the price minus a <b>5% fee</b> (half burned, half treasury). A listed card can't be used in decks or the Forge; cancel the listing any time to get it back. You always keep at least 5 unlisted cards.</p>
+      </div>
+
+      <div class="g-block">
+        <h3>10 · CLIMB THE LEADERBOARD</h3>
         <p>Everyone starts at <b>1200 ELO</b>. Winning raises it and losing lowers it; beating a higher-rated player earns more. The RANKS tab lists all players by ELO for the season.</p>
       </div>
 

@@ -128,6 +128,8 @@ function cardEl(c, opts = {}) {
   drawSprite(b.querySelector('canvas'), spriteSeed(c), c.el, c.rar);
   if (opts.hint) { const h = document.createElement('span'); h.className = 'hint ' + opts.hint.cls; h.textContent = opts.hint.txt; h.title = opts.hint.title; b.appendChild(h); }
   if (opts.isNew) { const n = document.createElement('span'); n.className = 'newtag'; n.textContent = 'NEW'; b.appendChild(n); }
+  if (c.listingId && !opts.noListed) { const n = document.createElement('span'); n.className = 'listedtag'; n.textContent = 'LISTED'; b.appendChild(n); }
+  if (opts.price != null) { const pr = document.createElement('div'); pr.className = 'pricetag num'; pr.textContent = fmt(opts.price) + ' FLIP'; b.appendChild(pr); }
   b.setAttribute('aria-label', `${c.name}, ${elName(c.el)}, power ${c.pow}, energy ${rar(c.rar).cost}`);
   return b;
 }
@@ -135,7 +137,7 @@ function backEl() { const d = document.createElement('div'); d.className = 'back
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
 // ---------- screens ----------
-const SCREENS = ['login', 'nickname', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'shop', 'ranks', 'history'];
+const SCREENS = ['login', 'nickname', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'history'];
 let current = null;
 function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
@@ -158,7 +160,7 @@ function setTab(tab) {
   if (S.match) return;
   S.tab = tab;
   [...$('tabs').children].forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ({ arena: renderArena, collection: renderCollection, forge: renderForge, shop: renderShop, ranks: renderRanks, history: renderHistory })[tab]();
+  ({ arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, history: renderHistory })[tab]();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { SFX.click(); setTab(b.dataset.tab); } };
 function lockTabs(on) { [...$('tabs').children].forEach(b => { b.disabled = on; b.style.opacity = on ? .45 : 1; }); }
@@ -268,6 +270,12 @@ function connectSocket() {
   s.on('lobby', l => { S.lobby = l; if (current === 'arena') renderRooms(); if (current === 'queue') renderQueueNote(); });
   s.on('match:state', onMatchState);
   s.on('match:end', onMatchEnd);
+  s.on('market:update', onMarketUpdate);
+  s.on('market:sold', d => {
+    S.me = d.profile; updateTop(); SFX.coin();
+    toast(`${d.buyer} bought your ${d.card} for ${fmt(d.price)} FLIP. You received ${fmt(d.received)} FLIP.`);
+    refreshMe().then(() => { if (current === 'market') drawMarket(); }).catch(() => {});
+  });
   s.on('match:error', e => { clearInterval(radarT); S.match = null; lockTabs(false); toast(e.error); refreshMe().catch(() => {}).then(() => setTab('arena')); });
   s.on('session:replaced', () => { S.socket = null; toast('You opened Flipfight in another tab. This tab is now paused.'); });
 }
@@ -346,6 +354,7 @@ function renderDeck() {
   sortedCards().forEach(c => {
     const el = cardEl(c); const on = S.sel.includes(c.uid);
     if (on) el.classList.add('sel');
+    if (c.listingId) { el.classList.add('dim'); el.disabled = true; el.title = 'Listed on the Market'; box.appendChild(el); return; }
     el.setAttribute('aria-pressed', on);
     el.onclick = () => { if (on) S.sel = S.sel.filter(x => x !== c.uid); else if (S.sel.length < 5) S.sel.push(c.uid); SFX.click(); renderDeck(); };
     box.appendChild(el);
@@ -570,6 +579,159 @@ async function renderCollection() {
   show('collection');
 }
 
+// ---------- market ----------
+const MK = { listings: [], recent: [], avgPrice: {}, view: 'buy', rar: 'all', el: 'all', sort: 'new', confirm: null, sellUid: null, busy: false };
+const ago = t => { const s = Math.max(1, Math.round((Date.now() - t) / 1000)); return s < 60 ? s + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : s < 86400 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
+async function renderMarket() {
+  show('market');
+  $('mkBody').innerHTML = '<p class="emptystate">Loading the market…</p>';
+  try {
+    const [m] = await Promise.all([api('/api/market'), refreshMe()]);
+    MK.listings = m.listings; MK.recent = m.recent; MK.avgPrice = m.avgPrice;
+  } catch (e) { $('mkBody').innerHTML = `<p class="emptystate">${esc(e.message)}</p>`; return; }
+  drawMarket();
+}
+function onMarketUpdate(u) {
+  const L = u.listing;
+  if (!L) return;
+  L.mine = !!S.me && L.seller === S.me.nickname; // broadcasts go to everyone, so work out ownership here
+  if (u.kind === 'listed') { if (!MK.listings.some(x => x.id === L.id)) MK.listings.unshift(L); }
+  else {
+    MK.listings = MK.listings.filter(x => x.id !== L.id);
+    if (u.kind === 'sold') { MK.recent.unshift({ ...L, soldAt: Date.now(), buyer: u.buyer }); MK.recent = MK.recent.slice(0, 15); }
+    if (MK.confirm === L.id) MK.confirm = null;
+  }
+  if (current === 'market') { drawMarket(); flashListing(u.kind === 'listed' ? L.id : null); }
+}
+function flashListing(id) { if (!id) return; const el = document.querySelector(`[data-listing="${id}"]`); if (el) el.classList.add('mk-new'); }
+function marketFilters(withSort) {
+  const btn = (key, val, label) => `<button type="button" data-f="${key}" data-v="${val}" aria-pressed="${MK[key] === val}">${label}</button>`;
+  return `<div class="filters">${btn('rar', 'all', 'ALL')}${Object.entries(S.cfg.rarities).map(([k, v]) => btn('rar', k, v.name)).join('')}</div>
+    <div class="filters">${btn('el', 'all', 'ANY ELEMENT')}${Object.entries(S.cfg.elements).map(([k, v]) => btn('el', k, v.name)).join('')}</div>` +
+    (withSort ? `<div class="filters">${btn('sort', 'new', 'NEWEST')}${btn('sort', 'low', 'PRICE ↑')}${btn('sort', 'high', 'PRICE ↓')}${btn('sort', 'power', 'POWER')}</div>` : '');
+}
+function drawMarket() {
+  [...$('mkTabs').children].forEach(b => b.setAttribute('aria-selected', b.dataset.v === MK.view));
+  const mine = MK.listings.filter(l => l.mine);
+  $('mkCount').textContent = `${MK.listings.length} card${MK.listings.length === 1 ? '' : 's'} for sale · fee ${Math.round(S.cfg.market.fee * 100)}% paid by the seller`;
+  $('mkMineCount').textContent = mine.length ? ` (${mine.length})` : '';
+  const body = $('mkBody'); body.innerHTML = '';
+  const pass = c => (MK.rar === 'all' || c.rar === MK.rar) && (MK.el === 'all' || c.el === MK.el);
+  if (MK.view === 'buy') {
+    body.insertAdjacentHTML('beforeend', marketFilters(true));
+    let ls = MK.listings.filter(l => !l.mine && pass(l.card));
+    ls.sort(MK.sort === 'low' ? (a, b) => a.price - b.price : MK.sort === 'high' ? (a, b) => b.price - a.price : MK.sort === 'power' ? (a, b) => b.card.pow - a.card.pow : (a, b) => b.createdAt - a.createdAt);
+    const grid = document.createElement('div'); grid.className = 'cards mk-grid';
+    if (!ls.length) grid.innerHTML = `<p class="emptystate">${MK.listings.filter(l => !l.mine).length ? 'No cards match these filters.' : 'Nothing for sale yet. Be the first to list a card in the Sell tab.'}</p>`;
+    ls.forEach(l => grid.appendChild(listingTile(l)));
+    body.appendChild(grid);
+  } else if (MK.view === 'sell') {
+    const sellable = sortedCards().filter(c => !c.listingId);
+    const listed = S.cards.filter(c => c.listingId).length;
+    const room = sellable.length - S.cfg.fusion.keepAtLeast;
+    body.insertAdjacentHTML('beforeend', `<p class="note">${room > 0 ? 'Tap a card to set a price. You keep at least ' + S.cfg.fusion.keepAtLeast + ' unlisted cards so you can always build a deck.' : 'You need more than ' + S.cfg.fusion.keepAtLeast + ' unlisted cards to sell one. Open a pack in the Shop to get more.'}</p>`);
+    if (MK.sellUid && sellable.some(c => c.uid === MK.sellUid)) body.appendChild(sellPanel(byUid(MK.sellUid)));
+    const grid = document.createElement('div'); grid.className = 'cards mk-grid';
+    sellable.forEach(c => {
+      const el = cardEl(c);
+      if (MK.sellUid === c.uid) el.classList.add('sel');
+      if (room <= 0 || listed >= S.cfg.market.maxListings) { el.classList.add('dim'); el.disabled = true; }
+      else el.onclick = () => { MK.sellUid = MK.sellUid === c.uid ? null : c.uid; SFX.click(); drawMarket(); if (MK.sellUid) $('mkBody').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' }); };
+      grid.appendChild(el);
+    });
+    body.appendChild(grid);
+  } else if (MK.view === 'mine') {
+    const grid = document.createElement('div'); grid.className = 'cards mk-grid';
+    if (!mine.length) grid.innerHTML = '<p class="emptystate">You have no cards listed. Use the Sell tab to list one.</p>';
+    mine.forEach(l => grid.appendChild(listingTile(l)));
+    body.appendChild(grid);
+  } else {
+    if (!MK.recent.length) { body.innerHTML = '<p class="emptystate">No sales yet.</p>'; return; }
+    body.insertAdjacentHTML('beforeend', `<div class="tblwrap"><table class="g-table"><thead><tr><th>Card</th><th>Seller</th><th class="r">Price</th><th class="r">When</th></tr></thead><tbody>` +
+      MK.recent.map(r => `<tr><td><span style="color:${RAR_COLORS[r.card.rar]}">${esc(r.card.name)}</span></td><td>${esc(r.seller)}</td><td class="r num">${fmt(r.price)}</td><td class="r">${ago(r.soldAt)}</td></tr>`).join('') + '</tbody></table></div>');
+  }
+  body.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { MK[b.dataset.f] = b.dataset.v; SFX.click(); drawMarket(); });
+}
+function listingTile(l) {
+  const wrap = document.createElement('div'); wrap.className = 'mk-tile'; wrap.dataset.listing = l.id;
+  wrap.appendChild(cardEl(l.card, { static: true, noListed: true }));
+  const info = document.createElement('div'); info.className = 'mk-info';
+  const avg = MK.avgPrice[l.card.tpl];
+  info.innerHTML = `<b class="num">${fmt(l.price)} FLIP</b><span>${l.mine ? 'Your listing' : 'by ' + esc(l.seller)} · ${ago(l.createdAt)}</span>` +
+    (avg ? `<span class="mk-avg">Avg sale ${fmt(avg.avg)}</span>` : '');
+  const btn = document.createElement('button'); btn.type = 'button';
+  if (l.mine) { btn.className = 'btn ghost'; btn.textContent = 'Cancel listing'; btn.onclick = () => cancelListing(l); }
+  else if (MK.confirm === l.id) {
+    btn.className = 'btn'; btn.textContent = `Confirm · ${fmt(l.price)}`; btn.onclick = () => buyListing(l);
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'linkbtn'; no.textContent = 'Not now';
+    no.onclick = () => { MK.confirm = null; drawMarket(); }; info.appendChild(no);
+  } else {
+    btn.className = 'btn'; btn.textContent = 'Buy';
+    btn.disabled = S.me.balance < l.price || MK.busy;
+    if (S.me.balance < l.price) btn.title = 'Not enough FLIP';
+    btn.onclick = () => { MK.confirm = l.id; SFX.click(); drawMarket(); };
+  }
+  info.appendChild(btn);
+  wrap.appendChild(info);
+  return wrap;
+}
+function sellPanel(c) {
+  const M = S.cfg.market, avg = MK.avgPrice[c.tpl];
+  const suggested = avg ? avg.avg : M.suggested[c.rar];
+  const d = document.createElement('form'); d.className = 'frame mk-sell';
+  d.innerHTML = `<div class="mk-sell-card"></div>
+    <div class="mk-sell-form">
+      <h3>LIST ${esc(c.name.toUpperCase())}</h3>
+      <label class="note" for="mkPrice">Price in FLIP</label>
+      <input id="mkPrice" inputmode="numeric" autocomplete="off" value="${suggested}">
+      <span class="note">${avg ? `Recent average for this card: ${fmt(avg.avg)} FLIP (${avg.n} sale${avg.n > 1 ? 's' : ''})` : `Suggested for a ${rar(c.rar).name.toLowerCase()}: ${fmt(M.suggested[c.rar])} FLIP`}</span>
+      <dl class="fg-out"><dt>Fee ${Math.round(M.fee * 100)}%</dt><dd id="mkFee"></dd><dt class="g-good">You get</dt><dd id="mkGet"></dd></dl>
+      <div class="row" style="gap:8px"><button class="btn" type="submit" id="mkListBtn">List for sale</button><button class="btn ghost" type="button" id="mkSellCancel">Cancel</button></div>
+      <p class="err" id="mkSellErr" role="alert"></p>
+    </div>`;
+  d.querySelector('.mk-sell-card').appendChild(cardEl(c, { static: true }));
+  const inp = d.querySelector('#mkPrice');
+  const upd = () => {
+    const p = Math.round(Number(String(inp.value).replace(/[^0-9]/g, '')) || 0);
+    d.querySelector('#mkFee').textContent = fmt(p * M.fee) + ' FLIP';
+    d.querySelector('#mkGet').textContent = fmt(p - p * M.fee) + ' FLIP';
+    const bad = p < M.minPrice || p > M.maxPrice;
+    d.querySelector('#mkListBtn').disabled = bad || MK.busy;
+    d.querySelector('#mkSellErr').textContent = bad ? `Price must be between ${fmt(M.minPrice)} and ${fmt(M.maxPrice)} FLIP.` : '';
+    return p;
+  };
+  inp.oninput = upd; upd();
+  d.querySelector('#mkSellCancel').onclick = () => { MK.sellUid = null; drawMarket(); };
+  d.onsubmit = async e => {
+    e.preventDefault(); if (MK.busy) return;
+    const price = upd(); MK.busy = true; d.querySelector('#mkListBtn').disabled = true;
+    try {
+      await api('/api/market/list', { uid: c.uid, price });
+      SFX.coin(); toast(`${c.name} is listed for ${fmt(price)} FLIP.`);
+      MK.sellUid = null; await refreshMe(); MK.view = 'mine';
+    } catch (err) { d.querySelector('#mkSellErr').textContent = err.message; }
+    MK.busy = false; drawMarket();
+  };
+  return d;
+}
+async function buyListing(l) {
+  if (MK.busy) return; MK.busy = true; drawMarket();
+  try {
+    const r = await api('/api/market/buy', { listingId: l.id });
+    S.me = r.profile; updateTop(); SFX.win();
+    toast(`You bought ${l.card.name} for ${fmt(l.price)} FLIP. It's in your collection.`);
+    await refreshMe();
+  } catch (e) { toast(e.message); SFX.lose(); }
+  MK.busy = false; MK.confirm = null; drawMarket();
+}
+async function cancelListing(l) {
+  if (MK.busy) return; MK.busy = true;
+  try { await api('/api/market/cancel', { listingId: l.id }); toast(`${l.card.name} is back in your collection.`); await refreshMe(); }
+  catch (e) { toast(e.message); }
+  MK.busy = false; drawMarket();
+}
+$('mkTabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; MK.view = b.dataset.v; MK.confirm = null; SFX.click(); drawMarket(); };
+
 // ---------- forge (fusion) ----------
 let fgSel = [], fgBusy = false;
 const pct = p => (p * 100 >= 10 ? (p * 100).toFixed(0) : (p * 100).toFixed(1)) + '%';
@@ -606,7 +768,7 @@ function drawForge() {
     $('fgLose').innerHTML = `1 random <b style="color:${RAR_COLORS[rarity]}">${rar(rarity).name}</b> card back`;
     $('fgFee').textContent = `${fmt(tier.fee)} FLIP (burned)`;
   } else { $('fgWin').textContent = 'Pick cards to see the outcome.'; $('fgLose').textContent = '–'; $('fgFee').textContent = '–'; }
-  const keepOk = S.cards.length - n + 1 >= F.keepAtLeast;
+  const keepOk = S.cards.filter(c => !c.listingId).length - n + 1 >= F.keepAtLeast;
   const enough = !tier || S.me.balance >= tier.fee;
   const ready = tier && n >= F.minCards && keepOk && enough && !fgBusy;
   $('fgGo').disabled = !ready;
@@ -631,7 +793,7 @@ function drawForge() {
     const fits = !rarity || c.rar === rarity;
     const el = cardEl(c);
     if (on) el.classList.add('sel');
-    if (!on && (!fusable || !fits || n >= F.maxCards)) { el.classList.add('dim'); el.disabled = true; el.title = !fusable ? 'Legendary cards cannot be fused' : !fits ? 'All cards must have the same rarity' : 'Maximum 4 cards'; }
+    if (!on && (c.listingId || !fusable || !fits || n >= F.maxCards)) { el.classList.add('dim'); el.disabled = true; el.title = c.listingId ? 'Listed on the Market' : !fusable ? 'Legendary cards cannot be fused' : !fits ? 'All cards must have the same rarity' : 'Maximum 4 cards'; }
     el.setAttribute('aria-pressed', on);
     el.onclick = () => { if (fgBusy) return; fgSel = on ? fgSel.filter(x => x !== c.uid) : fgSel.concat(c.uid); SFX.click(); $('fgReveal').hidden = true; drawForge(); };
     g.appendChild(el);
