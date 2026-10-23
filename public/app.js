@@ -122,7 +122,7 @@ function cardEl(c, opts = {}) {
   b.className = 'card' + (opts.static ? ' static' : '');
   b.style.setProperty('--rc', RAR_COLORS[c.rar]);
   if (!opts.static) b.type = 'button';
-  b.innerHTML = `<div class="ct"><span class="cost" title="Energy cost">${rar(c.rar).cost}</span><span class="el e-${c.el}">${elName(c.el)}</span></div>
+  b.innerHTML = `<div class="ct"><span class="cost" title="Energy cost: ${rar(c.rar).cost} of your 15 energy"><svg class="bolt" viewBox="0 0 5 8" aria-hidden="true"><path d="M2 0h1v1h-1zM3 0h1v1h-1zM4 0h1v1h-1zM2 1h1v1h-1zM3 1h1v1h-1zM1 2h1v1h-1zM2 2h1v1h-1zM0 3h1v1h-1zM1 3h1v1h-1zM2 3h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM2 4h1v1h-1zM3 4h1v1h-1zM1 5h1v1h-1zM2 5h1v1h-1zM1 6h1v1h-1zM0 7h1v1h-1z" fill="currentColor"/></svg>${rar(c.rar).cost}</span><span class="el e-${c.el}">${elName(c.el)}</span></div>
     <canvas class="art"></canvas><div class="cname">${esc(c.name)}</div>
     <div class="cf"><span class="pow num">${c.pow}</span><span class="tid">${esc(c.tid)}</span></div><span class="rar">${rar(c.rar).name}</span>`;
   drawSprite(b.querySelector('canvas'), spriteSeed(c), c.el, c.rar);

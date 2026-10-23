@@ -118,7 +118,8 @@ section{display:flex;flex-direction:column;gap:18px}
 .card.dim{opacity:.5}
 .card.static{cursor:default}
 .ct{display:flex;justify-content:space-between;align-items:center}
-.cost{font-family:var(--font-px);font-size:10px;background:var(--gold);color:#1a1306;width:22px;height:22px;display:grid;place-items:center}
+.cost{font-family:var(--font-px);font-size:10px;background:var(--gold);color:#1a1306;height:22px;padding:0 5px 0 4px;display:inline-flex;align-items:center;gap:3px;line-height:1}
+.cost .bolt{width:7px;height:11px;shape-rendering:crispEdges;flex:none}
 .el{font-family:var(--font-px);font-size:7px;padding:4px 5px;color:#140f1f}
 .e-fire{background:var(--fire)} .e-wind{background:var(--wind)} .e-earth{background:var(--earth)} .e-water{background:var(--water)}
 .art{width:100%;aspect-ratio:1;max-width:100%;image-rendering:pixelated;display:block;background:#0e0c1a}
