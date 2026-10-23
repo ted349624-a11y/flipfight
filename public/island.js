@@ -581,7 +581,7 @@ function enter(b) {
   if (I.onEnter) I.onEnter(b.id);
 }
 function sendPosition(now) {
-  if (!I.socket || now - I.lastSent < 110) return;
+  if (!I.socket || now - I.lastSent < 150) return;
   const me = I.me, key = `${Math.round(me.x)},${Math.round(me.y)},${me.dir},${me.moving ? 1 : 0}`;
   if (key === I.sentKey) return;
   I.sentKey = key; I.lastSent = now;
@@ -670,7 +670,12 @@ function render(now) {
   if (WW < vw) I.cam.x = (WW - vw) / 2; if (WH < vh) I.cam.y = (WH - vh) / 2;
   const cx = Math.round(I.cam.x), cy = Math.round(I.cam.y);
   const chars = [];
-  I.others.forEach(o => { o.x += (o.tx - o.x) * .2; o.y += (o.ty - o.y) * .2; o.anim = o.moving ? o.anim + .12 : 0; chars.push(o); });
+  I.others.forEach(o => {
+    const dx = o.tx - o.x, dy = o.ty - o.y, d = Math.hypot(dx, dy);
+    if (d > 64) { o.x = o.tx; o.y = o.ty; } // too far behind (e.g. after a hidden tab): jump
+    else if (d > .5) { const step = Math.min(d, Math.max(1.4, d * .1)); o.x += dx / d * step; o.y += dy / d * step; }
+    o.anim = o.moving || d > 2 ? o.anim + .12 : 0; chars.push(o);
+  });
   chars.push(me);
   renderWorld(now, { c, L: I.lctx, light: I.light, vw, vh, cx, cy, chars, flies: I.flies, glowAt: me });
   // signs, names and bubbles stay readable on top of the darkness
@@ -689,7 +694,7 @@ function render(now) {
     const nx = Math.round(p.x), ny = Math.round(p.y) - 26;
     px(c, 'rgba(20,15,35,.75)', nx - nw / 2 - 3, ny - 9, nw + 6, 11);
     c.fillStyle = p === me ? '#ffcc33' : '#f3ecd6'; c.fillText(name, nx, ny);
-    const em = p === me ? (now - (I.myEmoteAt || 0) < 3000 ? I.myEmote : '') : p.emote;
+    const em = p === me ? (now - (I.myEmoteAt || 0) < 3000 ? I.myEmote : '') : (p.emoteUntil > now ? p.emote : '');
     if (em) {
       const txt = EMOTE_TEXT[em] || em, bw = Math.round(c.measureText(txt).width + 10), by = ny - 26;
       px(c, OUT, nx - bw / 2 - 1, by - 1, bw + 2, 16); px(c, '#f4ecd8', nx - bw / 2, by, bw, 14); px(c, '#f4ecd8', nx - 1, by + 14, 3, 2); px(c, OUT, nx - 1, by + 16, 3, 1);
@@ -824,17 +829,25 @@ function resize() {
 }
 
 // ---------- network ----------
-function applyState(list, myId) {
-  const seen = new Set();
-  for (const [id, nick, x, y, dir, moving, addr, elo, emote] of list) {
-    if (id === myId) continue;
-    seen.add(id);
-    let o = I.others.get(id);
-    if (!o) { o = { id, nick, x, y, tx: x, ty: y, dir, moving: !!moving, anim: 0, look: lookOf(addr), elo }; I.others.set(id, o); }
-    o.tx = x; o.ty = y; o.dir = dir; o.moving = !!moving; o.emote = emote; o.nick = nick;
+// The server sends full profiles once (enter ack, 'island:join') and then only compact position deltas.
+function addOther(id, nick, addr, elo, x, y, fl, emote) {
+  let o = I.others.get(id);
+  if (!o) { o = { id, x, y, tx: x, ty: y, anim: 0 }; I.others.set(id, o); }
+  Object.assign(o, { nick, elo, look: lookOf(addr), tx: x, ty: y, dir: fl & 3, moving: !!(fl & 4) });
+  if (emote) { o.emote = emote; o.emoteUntil = performance.now() + 3000; }
+}
+const countChanged = () => I.onCount && I.onCount(I.others.size + 1);
+function applyFull(list, myId) {
+  I.others.clear();
+  for (const [id, nick, addr, elo, x, y, fl, emote] of list) if (id !== myId) addOther(id, nick, addr, elo, x, y, fl, emote);
+  countChanged();
+}
+function applyPos(arr, myId) {
+  for (let i = 0; i + 3 < arr.length; i += 4) {
+    const id = arr[i]; if (id === myId) continue;
+    const o = I.others.get(id); if (!o) continue;
+    o.tx = arr[i + 1]; o.ty = arr[i + 2]; o.dir = arr[i + 3] & 3; o.moving = !!(arr[i + 3] & 4);
   }
-  for (const id of [...I.others.keys()]) if (!seen.has(id)) I.others.delete(id);
-  if (I.onCount) I.onCount(seen.size + 1);
 }
 
 window.Island = {
@@ -861,8 +874,12 @@ window.Island = {
     I.cam.x = Math.max(0, Math.min(WW - I.vw, I.me.x - I.vw / 2)); I.cam.y = Math.max(0, Math.min(WH - I.vh, I.me.y - I.vh / 2));
     I.mounted = true; I.last = 0; I.sentKey = '';
     if (socket) {
-      socket.off('island:state'); socket.on('island:state', d => applyState(d.players, me.id));
-      socket.emit('island:enter', { x: I.me.x, y: I.me.y }, r => { if (r && r.ok) applyState(r.players, me.id); });
+      ['island:pos', 'island:join', 'island:left', 'island:emote'].forEach(e => socket.off(e));
+      socket.on('island:pos', arr => Array.isArray(arr) && applyPos(arr, me.id));
+      socket.on('island:join', d => { if (Array.isArray(d) && d[0] !== me.id) { addOther(...d); countChanged(); } });
+      socket.on('island:left', id => { I.others.delete(id); countChanged(); });
+      socket.on('island:emote', ([id, e]) => { const o = I.others.get(id); if (o) { o.emote = e; o.emoteUntil = performance.now() + 3000; } });
+      socket.emit('island:enter', { x: I.me.x, y: I.me.y }, r => { if (r && r.ok) applyFull(r.players, me.id); });
     }
     cancelAnimationFrame(I.raf); I.raf = requestAnimationFrame(loop);
     requestAnimationFrame(resize); // the canvas may only get its final size after layout
@@ -878,6 +895,6 @@ window.Island = {
   goTo(id) { const b = BUILDINGS.find(x => x.id === id); if (b && I.mounted) { I.pending = b.id; I.cooldownDoor = null; I.path = findPath(I.me.x, I.me.y, b.door.x, b.door.y + 2); } },
   resize,
   zoom(n) { I.zoom = n || 0; resize(); },
-  state: () => ({ me: I.me && { x: Math.round(I.me.x), y: Math.round(I.me.y), dir: I.me.dir }, others: [...I.others.values()].map(o => ({ nick: o.nick, x: Math.round(o.tx), y: Math.round(o.ty), emote: o.emote })), path: I.path.length, scale: I.scale, view: [I.vw, I.vh] }),
+  state: () => ({ me: I.me && { x: Math.round(I.me.x), y: Math.round(I.me.y), dir: I.me.dir }, others: [...I.others.values()].map(o => ({ nick: o.nick, x: Math.round(o.tx), y: Math.round(o.ty), emote: o.emoteUntil > performance.now() ? o.emote : '' })), path: I.path.length, scale: I.scale, view: [I.vw, I.vh] }),
 };
 })();
