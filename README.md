@@ -111,6 +111,10 @@ scripts/smoke-test.js  Uçtan uca test
 
 Her kartın bir ön ve bir arka yüzü var. Maçta kartı seçince hangi yüzünün açılacağını da seçersin. Arka yüz biraz daha zayıftır (%93–98 güç) ama başka bir elementi ve bir yeteneği vardır: FLIP TRAP (rakibin kartını ters çevirir, çevrilen kart −8), SHIELD (beraberliği kazanır), ECHO (element bonusu +%60), AMBUSH (daha pahalı karta karşı +20), RALLY (sonraki kartın +10), DRAIN (rakip 2 enerji kaybeder). Denge `scripts/bot-sim.js` ile ayarlandı: iki yüzü de kullanan oyuncu hiç çevirmeyene karşı ~%60 kazanıyor.
 
+## FLIP! çağrısı (pot ikiye katlanır)
+
+2. turdan itibaren, kartını kilitlemeden önce maç başına bir kez "FLIP! ×2" basabilirsin. Rakibin 12 saniyede ya kabul eder (ikiniz de bir giriş daha yatırırsınız, pot ikiye katlanır) ya da çekilir (maçı mevcut bahisten hemen kaybeder). İki oyuncu da birer kez çağırabildiği için pot en fazla ×4 olur. Cevap gelmezse ve parası yetiyorsa kabul sayılır. Antrenmanda bot da FLIP! çağırır ve cevaplar. Test: `node scripts/flip-call-test.js <url> <previewKey>`.
+
 ## Kurucu (founder) hesabı
 
 Render → Environment kısmına ekle:

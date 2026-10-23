@@ -149,11 +149,18 @@
         <div id="mySlot"></div>
       </div>
       <div class="outcome"><span class="verdict" id="verdict"></span><span class="calc" id="calc"></span></div>
+      <div class="flip-ask" id="flipAsk" hidden role="alertdialog" aria-labelledby="faTitle">
+        <b id="faTitle">FLIP!</b>
+        <p id="faText"></p>
+        <div class="row" style="justify-content:center"><button class="btn" type="button" id="faAccept">Accept</button><button class="btn ghost" type="button" id="faFold">Fold</button></div>
+        <span class="fa-timer num" id="faTimer"></span>
+      </div>
     </div>
     <div class="cards hand" id="hand"></div>
     <div class="face-pick" id="facePick" hidden></div>
     <div class="row" style="justify-content:center">
       <button class="btn" id="lock" disabled>Lock card</button>
+      <button class="btn flipcall" type="button" id="flipCall" hidden title="Double the stakes. Your opponent accepts or folds.">FLIP! ×2</button>
       <button class="btn ghost" id="quitPractice" hidden>Quit practice</button>
     </div>
     <p class="note" id="lockNote" style="text-align:center">Pick a card.</p>
@@ -354,6 +361,11 @@
             <tr><td><b>DRAIN</b></td><td>Your opponent loses 2 energy.</td></tr>
           </tbody>
         </table></div>
+      </div>
+
+      <div class="g-block">
+        <h3>FLIP! DOUBLE THE STAKES</h3>
+        <p>From round 2, before you lock a card, you can press <b>FLIP! ×2</b> once per match. Your opponent has 12 seconds to <b>accept</b> (both of you add one more entry and the pot doubles) or <b>fold</b> (they lose the match right away at the current stakes). Both players can call once, so a pot can reach <b>×4</b>. Call when you're ahead, or bluff when you're not.</p>
       </div>
 
       <div class="g-block">

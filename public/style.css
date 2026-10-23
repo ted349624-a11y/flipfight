@@ -578,3 +578,15 @@ body:not(.on-island) .wrap::before{content:"";position:fixed;top:0;bottom:0;left
 .side .left i.pair{display:inline-flex;width:14px;height:12px;margin-right:4px;box-shadow:0 0 0 2px #0b0916}
 .side .left i.pair b{flex:1}
 .rally-note{display:block;font-family:var(--font-px);font-size:7px;color:var(--good);margin-top:4px}
+
+/* FLIP! call */
+.btn.flipcall{background:#c79bff;color:#1a0f2a;box-shadow:0 0 0 3px #0b0916,0 6px 0 3px #6b3fd6;animation:flipPulse 1.6s ease-in-out infinite}
+@keyframes flipPulse{50%{transform:translateY(-2px);box-shadow:0 0 0 3px #0b0916,0 8px 0 3px #6b3fd6,0 0 18px 4px rgba(199,155,255,.5)}}
+@media (prefers-reduced-motion:reduce){.btn.flipcall{animation:none}}
+.flip-ask{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;width:min(440px,calc(100% - 24px));display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:18px 16px;text-align:center;background:#1d1534;box-shadow:0 0 0 4px #c79bff,0 0 0 8px #0b0916,0 12px 40px rgba(0,0,0,.6)}
+.flip-ask b#faTitle{font-family:var(--font-px);font-size:22px;color:#c79bff;text-shadow:3px 3px 0 #0b0916}
+.flip-ask p{margin:0;font-size:20px;line-height:1.2}
+.flip-ask p b{color:var(--gold);font-weight:400}
+.fa-timer{font-family:var(--font-px);font-size:8px;color:var(--muted)}
+#pot.doubled{color:#c79bff}

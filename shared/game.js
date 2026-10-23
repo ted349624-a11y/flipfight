@@ -150,6 +150,10 @@ const ECONOMY = {
 const CHAIN_ID = 4663; // Robinhood Chain mainnet (sign-in messages only; nothing is sent on-chain)
 
 const MATCH = { energy: 15, rounds: 5, winsNeeded: 3, turnMs: 20000, revealMs: 2600, deckSize: 5 };
+// FLIP! call (like a doubling cube): from round 2, before locking a card, each player may once ask to double the
+// stakes. The other player accepts (both pay one more entry at the current level) or folds and loses right away
+// at the current level. Max x4. No answer in time = accept if they can afford it.
+const FLIP_CALL = { fromRound: 2, maxMult: 4, answerMs: 12000 };
 
 function cardView(row) {
   const t = TEMPLATES[row.tpl], b = BACKS[row.tpl];
@@ -200,4 +204,4 @@ function clash(a, b) {
   };
 }
 
-module.exports = { BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { FLIP_CALL, BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

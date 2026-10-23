@@ -70,9 +70,20 @@ function createBot(G) {
     return a.wins > b.wins ? 1 : a.wins === b.wins ? 0.5 : 0;
   }
 
+  // FLIP! decisions from a quick look ahead: chance of winning from here
+  function winChance(me, opp, n = 40) { let s = 0; for (let k = 0; k < n; k++) s += rollout(me, opp, null); return s / n; }
+  function wantsFlip(level, me, opp) {
+    if (level === 'easy') return rand() < 0.1;
+    return winChance(me, opp) > (level === 'hard' ? 0.72 : 0.8);
+  }
+  function takesFlip(level, me, opp) {
+    if (level === 'easy') return rand() < 0.6;
+    return winChance(me, opp) > (level === 'hard' ? 0.25 : 0.35); // a backgammon player's take point is 25%
+  }
+
   const thinkMs = level => (level === 'easy' ? 1200 : 1800) + crypto.randomInt(0, 3200);
 
-  return { buildDeck, choose, modelPick, thinkMs };
+  return { buildDeck, choose, modelPick, wantsFlip, takesFlip, thinkMs };
 }
 
 module.exports = { createBot };

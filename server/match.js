@@ -81,7 +81,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       const human = { userId: u.id, nickname: u.nickname, elo: u.elo, hand: cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
       const botP = { userId: BOT_ID, isBot: true, nickname: `Training Bot · ${G.BOT_LEVELS[level].name}`, elo: G.BOT_LEVELS[level].elo,
         hand: bot.buildDeck(cards), used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
-      const m = { id: crypto.randomUUID(), room: G.PRACTICE, practice: true, level, players: [human, botP], round: 1, phase: 'pick', deadline: 0, timer: null, botTimer: null, log: [] };
+      const m = { id: crypto.randomUUID(), room: G.PRACTICE, practice: true, level, players: [human, botP], round: 1, phase: 'pick', deadline: 0, timer: null, botTimer: null, log: [], mult: 1, flip: null };
       matches.set(m.id, m);
       userMatch.set(userId, m.id);
       broadcastLobby();
@@ -135,7 +135,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       const u = await q.userById(e.userId);
       return { userId: u.id, nickname: u.nickname, elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
     };
-    const m = { id, room, players: [await mk(a), await mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [] };
+    const m = { id, room, players: [await mk(a), await mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [], mult: 1, flip: null };
     matches.set(m.id, m);
     broadcastLobby();
     startRound(m);
@@ -148,7 +148,63 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     clearTimeout(m.timer);
     m.timer = setTimeout(() => timeoutRound(m), G.MATCH.turnMs + 500);
     emitState(m);
-    if (m.practice) { clearTimeout(m.botTimer); m.botTimer = setTimeout(() => botPick(m), bot.thinkMs(m.level)); }
+    if (m.practice) {
+      clearTimeout(m.botTimer);
+      const b = m.players[1];
+      if (canCall(m, 1) && bot.wantsFlip(m.level, b, m.players[0])) m.botTimer = setTimeout(() => callFlip(BOT_ID, m.id).catch(log), 900 + crypto.randomInt(0, 900));
+      else m.botTimer = setTimeout(() => botPick(m), bot.thinkMs(m.level));
+    }
+  }
+
+  // ---------- FLIP! call ----------
+  const entryOf = m => m.room.stake * m.mult; // what each player has in the pot right now
+  function canCall(m, idx) {
+    const p = m.players[idx];
+    return m.phase === 'pick' && !m.flip && m.calling === undefined && m.round >= G.FLIP_CALL.fromRound && !p.calledFlip && p.pick === null && m.mult * 2 <= G.FLIP_CALL.maxMult;
+  }
+  async function callFlip(userId, matchId) {
+    const m = matches.get(matchId || userMatch.get(userId));
+    if (!m || (userId !== BOT_ID && userMatch.get(userId) !== m.id)) throw new Error('This match is over.');
+    const idx = m.players.findIndex(p => p.userId === userId);
+    if (!canCall(m, idx)) throw new Error('You can\'t call FLIP right now.');
+    const extra = entryOf(m), round = m.round;
+    m.calling = idx; // blocks picks and other calls while the payment goes through
+    let paid = false;
+    try { paid = m.players[idx].isBot || (await q.spendBalance(userId, extra)); } finally { delete m.calling; }
+    if (!paid) throw new Error(`You need ${extra.toLocaleString('en-US')} FLIP to call.`);
+    if (m.phase !== 'pick' || m.round !== round || !matches.has(m.id)) { if (!m.players[idx].isBot) await q.addBalance(userId, extra); throw new Error('Too late: the round moved on.'); }
+    m.players[idx].calledFlip = true;
+    clearTimeout(m.timer); clearTimeout(m.botTimer);
+    m.flip = { by: idx, extra, left: Math.max(3000, m.deadline - Date.now()), deadline: Date.now() + G.FLIP_CALL.answerMs };
+    m.phase = 'flip';
+    m.timer = setTimeout(() => answerFlip(m.players[1 - idx].userId, m.id, null).catch(log), G.FLIP_CALL.answerMs + 300);
+    emitState(m);
+    if (m.practice && m.players[1 - idx].isBot) m.botTimer = setTimeout(() => answerFlip(BOT_ID, m.id, bot.takesFlip(m.level, m.players[1], m.players[0])).catch(log), 1400 + crypto.randomInt(0, 1200));
+  }
+  // accept: true / false; null = no answer (accept if affordable)
+  async function answerFlip(userId, matchId, accept) {
+    const m = matches.get(matchId);
+    if (!m || m.phase !== 'flip' || !m.flip) return;
+    const idx = m.players.findIndex(p => p.userId === userId);
+    if (idx < 0 || idx === m.flip.by) throw new Error('Not your call to answer.');
+    const f = m.flip, me = m.players[idx];
+    m.flip = null; clearTimeout(m.timer); clearTimeout(m.botTimer); // answer only once
+    let ok = accept !== false;
+    if (ok && !me.isBot) ok = await q.spendBalance(me.userId, f.extra);
+    if (!ok) { // fold: the caller wins now at the current level; refund the caller's extra
+      if (!m.players[f.by].isBot) await q.addBalance(m.players[f.by].userId, f.extra);
+      m.folded = { by: idx };
+      m.phase = 'done';
+      emitState(m);
+      return m.practice ? finishPractice(m, f.by) : finishMatch(m, f.by);
+    }
+    m.mult *= 2;
+    m.lastFlip = { by: f.by, mult: m.mult, at: Date.now() };
+    m.phase = 'pick';
+    m.deadline = Date.now() + f.left + 1500;
+    m.timer = setTimeout(() => timeoutRound(m), f.left + 2000);
+    emitState(m);
+    if (m.practice && m.players[1].pick === null) m.botTimer = setTimeout(() => botPick(m), bot.thinkMs(m.level));
   }
 
   function viewFor(m, idx) {
@@ -157,9 +213,12 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       matchId: m.id,
       room: { id: m.room.id, name: m.room.name, stake: m.room.stake, practice: !!m.practice, level: m.level || null },
       round: m.round, phase: m.phase, deadline: m.deadline, serverNow: Date.now(),
-      you: { nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick, face: me.face, bonus: me.bonus },
+      mult: m.mult, entry: entryOf(m), canCall: canCall(m, idx), lastFlip: m.lastFlip ? { mine: m.lastFlip.by === idx, mult: m.lastFlip.mult, at: m.lastFlip.at } : null,
+      flipCall: m.flip ? { mine: m.flip.by === idx, extra: m.flip.extra, deadline: m.flip.deadline } : null,
+      folded: m.folded ? { me: m.folded.by === idx } : null,
+      you: { calledFlip: !!me.calledFlip, nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick, face: me.face, bonus: me.bonus },
       opp: {
-        nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null, bonus: op.bonus,
+        calledFlip: !!op.calledFlip, nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null, bonus: op.bonus,
         leftElements: op.hand.filter(c => !op.used.includes(c.uid)).map(c => c.el),
         leftSides: op.hand.filter(c => !op.used.includes(c.uid)).map(c => [c.el, c.back.el]),
       },
@@ -183,7 +242,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
   function pick(userId, matchId, uid, face) {
     const m = matches.get(matchId);
     if (!m || userMatch.get(userId) !== matchId) throw new Error('This match is over.');
-    if (m.phase !== 'pick') throw new Error('Wait for the next round.');
+    if (m.phase !== 'pick' || m.calling !== undefined) throw new Error('Wait for the next round.');
     const p = m.players.find(x => x.userId === userId);
     if (p.pick !== null) throw new Error('You already locked a card this round.');
     const card = p.hand.find(c => c.uid === uid);
@@ -195,6 +254,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
 
   function timeoutRound(m) {
     if (m.phase !== 'pick') return;
+    if (m.calling !== undefined) { m.timer = setTimeout(() => timeoutRound(m), 300); return; } // a FLIP! payment is in flight
     m.players.forEach(p => {
       if (p.pick !== null) return;
       const left = p.hand.filter(c => !p.used.includes(c.uid));
@@ -219,7 +279,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     emitState(m);
     const over = m.players.some(p => p.wins >= G.MATCH.winsNeeded) || m.log.length >= G.MATCH.rounds;
     m.timer = setTimeout(() => {
-      if (!matches.has(m.id)) return; // practice match was left early
+      if (!matches.has(m.id) || m.phase === 'done') return; // practice match was left early, or someone folded
       if (over) (m.practice ? finishPractice(m) : finishMatch(m).catch(log));
       else { m.round++; startRound(m); }
     }, G.MATCH.revealMs);
@@ -230,25 +290,25 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     return Math.round(32 * (score - expected));
   }
 
-  async function finishPractice(m) {
+  async function finishPractice(m, forced) {
     m.phase = 'done';
     const [p, b] = m.players;
-    const out = p.wins > b.wins ? 'win' : p.wins < b.wins ? 'loss' : 'draw';
+    const out = forced !== undefined ? (forced === 0 ? 'win' : 'loss') : p.wins > b.wins ? 'win' : p.wins < b.wins ? 'loss' : 'draw';
     userMatch.delete(p.userId);
     matches.delete(m.id);
     emitTo(p.userId, 'match:end', {
-      matchId: m.id, practice: true, level: m.level, out, myWins: p.wins, oppWins: b.wins, opponent: b.nickname, room: m.room.name,
+      matchId: m.id, practice: true, level: m.level, out, myWins: p.wins, oppWins: b.wins, opponent: b.nickname, room: m.room.name, mult: m.mult, folded: m.folded ? (m.folded.by === 0 ? 'me' : 'them') : null,
       stake: 0, pot: 0, rake: 0, net: 0, split: { burn: 0, treasury: 0, season: 0 }, eloDelta: 0,
       profile: publicProfile(await q.userById(p.userId)),
     });
     broadcastLobby();
   }
 
-  async function finishMatch(m) {
+  async function finishMatch(m, forced) {
     m.phase = 'done';
     const [p1, p2] = m.players;
-    const winnerIdx = p1.wins > p2.wins ? 0 : p2.wins > p1.wins ? 1 : null;
-    const stake = m.room.stake, pot = stake * 2;
+    const winnerIdx = forced !== undefined ? forced : p1.wins > p2.wins ? 0 : p2.wins > p1.wins ? 1 : null;
+    const stake = entryOf(m), pot = stake * 2;
     const rake = winnerIdx === null ? 0 : Math.round(pot * m.room.rake);
     const s1 = winnerIdx === null ? 0.5 : winnerIdx === 0 ? 1 : 0;
     const d1 = eloDelta(p1.elo, p2.elo, s1), d2 = eloDelta(p2.elo, p1.elo, 1 - s1);
@@ -279,7 +339,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       const u = await q.userById(p.userId);
       userMatch.delete(p.userId);
       emitTo(p.userId, 'match:end', {
-        matchId: m.id, out, myWins: p.wins, oppWins: op.wins, opponent: op.nickname, room: m.room.name,
+        matchId: m.id, out, myWins: p.wins, oppWins: op.wins, opponent: op.nickname, room: m.room.name, mult: m.mult, folded: m.folded ? (m.folded.by === i ? 'me' : 'them') : null,
         stake, pot, rake, net: out === 'win' ? pot - rake - stake : out === 'loss' ? -stake : 0,
         split: { burn: rake * G.ECONOMY.feeSplit.burn, treasury: rake * G.ECONOMY.feeSplit.treasury, season: rake * G.ECONOMY.feeSplit.season },
         eloDelta: i === 0 ? d1 : d2, profile: publicProfile(u),
@@ -310,6 +370,8 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     }));
     socket.on('practice:start', (data, fn) => handle(fn, async () => ({ matchId: await startPractice(userId, String(data && data.level)) })));
     socket.on('match:quit', (data, fn) => handle(fn, () => { quitPractice(userId); return {}; }));
+    socket.on('match:flip', (data, fn) => handle(fn, async () => { await callFlip(userId, String(data && data.matchId)); return {}; }));
+    socket.on('match:flip-answer', (data, fn) => handle(fn, async () => { await answerFlip(userId, String(data && data.matchId), !!(data && data.accept)); return {}; }));
     socket.on('match:pick', (data, fn) => handle(fn, () => { pick(userId, String(data && data.matchId), Number(data && data.uid), Number(data && data.face)); return {}; }));
 
     socket.on('disconnect', () => {

@@ -666,6 +666,10 @@ function addLogLine(r) {
 }
 function drawTimer() {
   const m = S.match; if (!m) return;
+  if (m.phase === 'flip' && m.flipCall) {
+    const l = Math.max(0, Math.ceil((m.flipCall.deadline - (Date.now() + clockSkew)) / 1000));
+    $('timer').textContent = `FLIP ${l}s`; $('faTimer').textContent = `${l}s · no answer = accept`; return;
+  }
   if (m.phase !== 'pick') { $('timer').textContent = ''; return; }
   const left = Math.max(0, Math.ceil((m.deadline - (Date.now() + clockSkew)) / 1000));
   const txt = `⏱ ${left}s`;
@@ -688,7 +692,24 @@ function renderMatch() {
   $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>${m.you.bonus ? `<span class="rally-note">RALLY +${m.you.bonus} on your next card</span>` : ''}`;
   $('score').textContent = `${m.opp.wins} : ${m.you.wins}`;
   $('rnd').textContent = `ROUND ${m.round}/5`;
-  $('pot').textContent = m.room.practice ? 'PRACTICE · NO STAKES' : `Pot ${fmt(m.room.stake * 2)} FLIP`;
+  $('pot').textContent = m.room.practice ? `PRACTICE · NO STAKES${m.mult > 1 ? ' · ×' + m.mult : ''}` : `Pot ${fmt(m.entry * 2)} FLIP${m.mult > 1 ? ' · ×' + m.mult : ''}`;
+  $('pot').classList.toggle('doubled', m.mult > 1);
+  // FLIP! call: button, answer panel, banner when it's accepted
+  $('flipCall').hidden = !m.canCall;
+  $('flipCall').textContent = `FLIP! ×${m.mult * 2}`;
+  const ask = m.phase === 'flip' && m.flipCall && !m.flipCall.mine;
+  $('flipAsk').hidden = !ask;
+  if (ask) {
+    const afford = m.room.practice || S.me.balance >= m.flipCall.extra;
+    $('faText').innerHTML = `${esc(m.opp.nickname)} wants to double the stakes to <b>×${m.mult * 2}</b>.` +
+      (m.room.practice ? ' (Practice: nothing to pay.)' : ` Accepting costs <b class="num">${fmt(m.flipCall.extra)} FLIP</b>; folding loses this match now and your <b class="num">${fmt(m.entry)} FLIP</b> entry.`);
+    $('faAccept').disabled = !afford; $('faAccept').textContent = afford ? 'Accept' : 'Not enough FLIP';
+    if (S.flipAskShown !== m.flipCall.deadline) { S.flipAskShown = m.flipCall.deadline; SFX.found(); showBoard(); }
+  }
+  if (m.lastFlip && S.flipBannerAt !== m.lastFlip.at) {
+    S.flipBannerAt = m.lastFlip.at;
+    if (Date.now() + clockSkew - m.lastFlip.at < 6000) { FX.banner(document.querySelector('#match .board'), `FLIP! ×${m.lastFlip.mult}`, '#c79bff', m.lastFlip.mine ? 'They accepted' : 'You accepted'); SFX.legend(); }
+  }
   $('quitPractice').hidden = !m.room.practice;
 
   // slots + verdict
@@ -732,13 +753,15 @@ function renderMatch() {
     }
     $('oppSlot').replaceChildren(m.opp.locked ? backEl() : emptySlot('Opponent'));
     $('mySlot').replaceChildren(m.you.pick !== null ? backEl() : emptySlot('Your card'));
-    $('verdict').textContent = m.you.pick !== null ? 'LOCKED · WAITING FOR OPPONENT' : '';
+    $('verdict').textContent = m.folded ? (m.folded.me ? 'YOU FOLDED' : 'THEY FOLDED') : m.phase === 'flip' ? (m.flipCall.mine ? `FLIP! CALLED · WAITING FOR ${m.opp.nickname.toUpperCase()}` : 'FLIP! CALLED')
+      : m.you.pick !== null ? 'LOCKED · WAITING FOR OPPONENT' : '';
     $('verdict').style.color = 'var(--muted)'; $('calc').textContent = '';
   }
 
   // hand
   const hand = $('hand'); hand.innerHTML = '';
   const canPick = m.phase === 'pick' && m.you.pick === null;
+  $('lock').hidden = m.phase === 'flip';
   m.you.hand.forEach(c => {
     const used = m.you.used.includes(c.uid) || m.you.pick === c.uid;
     let hint = null;
@@ -776,6 +799,20 @@ function renderMatch() {
     (rar(pc.rar).cost > m.you.energy ? `${ps.name} will play exhausted (half power).` : `${ps.name} · costs ${rar(pc.rar).cost} energy.`);
 }
 $('facePick').onclick = e => { const b = e.target.closest('[data-face]'); if (!b || !S.match) return; S.matchFace = Number(b.dataset.face); SFX.click(); renderMatch(); };
+$('flipCall').onclick = async () => {
+  const m = S.match; if (!m) return;
+  $('flipCall').disabled = true; SFX.lock();
+  try { await emit('match:flip', { matchId: m.matchId }); } catch (e) { toast(e.message); }
+  finally { $('flipCall').disabled = false; }
+};
+const answerFlip = async accept => {
+  const m = S.match; if (!m) return;
+  $('faAccept').disabled = $('faFold').disabled = true; SFX.click();
+  try { await emit('match:flip-answer', { matchId: m.matchId, accept }); } catch (e) { toast(e.message); }
+  finally { $('faAccept').disabled = $('faFold').disabled = false; }
+};
+$('faAccept').onclick = () => answerFlip(true);
+$('faFold').onclick = () => answerFlip(false);
 $('lock').onclick = async () => {
   const m = S.match; if (!m || S.matchSel === null) return;
   $('lock').disabled = true; SFX.lock(); showBoard();
@@ -798,7 +835,7 @@ function onMatchEnd(r) {
   }, 0);
   document.querySelectorAll('#result .promo').forEach(e => e.remove());
   setTimeout(maybeSeasonModal, 2500);
-  const rows = [`<dt>Your entry</dt><dd class="num">−${fmt(r.stake)}</dd>`];
+  const rows = [`<dt>Your entry${r.mult > 1 ? ` (×${r.mult})` : ''}</dt><dd class="num">−${fmt(r.stake)}</dd>`];
   if (r.practice) {
     rows.length = 0;
     rows.push(`<dt>Mode</dt><dd>Practice vs ${esc(S.cfg.botLevels[r.level].name)} bot</dd>`, `<dt class="tot">FLIP and ELO</dt><dd class="tot">Unchanged</dd>`);
@@ -814,6 +851,8 @@ function onMatchEnd(r) {
     rows.push(`<dt>Refund</dt><dd class="num">+${fmt(r.stake)}</dd>`, `<dt class="tot">Net</dt><dd class="tot num">0 FLIP</dd>`);
   }
   if (r.rake) rows.push(`<dt>Fee split</dt><dd class="num">${fmt(r.split.burn)} burned · ${fmt(r.split.treasury)} treasury · ${fmt(r.split.season)} season</dd>`);
+  if (r.mult > 1) rows.splice(1, 0, `<dt>FLIP! stakes</dt><dd class="num">×${r.mult}</dd>`);
+  if (r.folded) rows.push(`<dt>Ended by</dt><dd>${r.folded === 'me' ? 'You folded a FLIP! call' : `${esc(r.opponent)} folded your FLIP! call`}</dd>`);
   $('resTitle').textContent = r.out === 'win' ? 'VICTORY' : r.out === 'loss' ? 'DEFEAT' : 'DRAW';
   $('resTitle').style.color = r.out === 'win' ? 'var(--gold)' : r.out === 'loss' ? 'var(--bad)' : 'var(--fg)';
   $('resSub').textContent = r.practice ? `${r.myWins}–${r.oppWins} vs ${r.opponent}` : `${r.myWins}–${r.oppWins} vs ${r.opponent} · ELO ${r.profile.elo} (${r.eloDelta >= 0 ? '+' : ''}${r.eloDelta})`;
