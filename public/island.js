@@ -492,9 +492,10 @@ const HAIR = ['#2a1d14', '#5a3a22', '#e0b860', '#d84f3a', '#f3ecd6', '#4f8dff', 
 const SHIRT = ['#ff6b35', '#4f8dff', '#5fd38d', '#b26bff', '#ffcc33', '#ff5d6c', '#4fd3d3', '#d39552'];
 const PANTS = ['#3a3150', '#4a3a2a', '#23408f', '#2f5a3a', '#5a3a5a'];
 const shade = (hex, f) => '#' + [1, 3, 5].map(i => Math.max(0, Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * f))).toString(16).padStart(2, '0')).join('');
-function lookOf(addr) {
+function lookOf(addr, founder) {
   const s = String(addr || '0x0').toLowerCase().replace(/^0x/, '');
   const n = i => parseInt(s.slice(i * 2, i * 2 + 2) || '0', 16) || 0;
+  if (founder) return { skin: SKIN[n(1) % SKIN.length], hair: HAIR[n(2) % HAIR.length], shirt: '#6b3fd6', pants: '#2a1d4a', boots: '#5b3a26', cap: null, founder: true, key: 'founder:' + s.slice(0, 12) };
   return { skin: SKIN[n(1) % SKIN.length], hair: HAIR[n(2) % HAIR.length], shirt: SHIRT[n(3) % SHIRT.length], pants: PANTS[n(4) % PANTS.length], cap: n(5) % 3 === 0 ? SHIRT[(n(6) + 3) % SHIRT.length] : null, key: s.slice(0, 12) };
 }
 const sheets = new Map();
@@ -502,16 +503,47 @@ const sheets = new Map();
 function sheetFor(L) {
   if (sheets.has(L.key)) return sheets.get(L.key);
   const FW = 16, FH = 22, cv = canvas(FW * 3, FH * 4), c = cv.getContext('2d');
-  const col = { o: OUT, h: L.hair, H: shade(L.hair, .72), s: L.skin, S: shade(L.skin, .8), e: OUT, w: '#ffffff', t: L.shirt, T: shade(L.shirt, .75), p: L.pants, b: '#3a2a22' };
+  const col = { o: OUT, h: L.hair, H: shade(L.hair, .72), s: L.skin, S: shade(L.skin, .8), e: OUT, w: '#ffffff', t: L.shirt, T: shade(L.shirt, .75), p: L.pants, b: L.boots || '#3a2a22' };
   const paint = (rows, ox, oy, flip) => rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch !== '.' && col[ch]) px(c, col[ch], ox + (flip ? 13 - x : x) + 1, oy + y); }));
-  const dirs = [[BODY_FRONT, 'stand', 'walkA', 'walkB', false], [BODY_SIDE, 'sideStand', 'sideA', 'sideB', true], [BODY_SIDE, 'sideStand', 'sideA', 'sideB', false], [BODY_BACK, 'stand', 'walkA', 'walkB', false]];
+  // side sprites face left as drawn, so "right" is the mirrored one
+  const dirs = [[BODY_FRONT, 'stand', 'walkA', 'walkB', false], [BODY_SIDE, 'sideStand', 'sideA', 'sideB', false], [BODY_SIDE, 'sideStand', 'sideA', 'sideB', true], [BODY_BACK, 'stand', 'walkA', 'walkB', false]];
   dirs.forEach(([body, s0, s1, s2, flip], d) => [s0, s1, s2].forEach((legs, f) => {
     const ox = f * FW, oy = d * FH, bob = f ? 1 : 0;
+    if (L.founder) founderCape(c, ox, oy, d, bob, f, false);
     paint(body, ox, oy + 2 + bob, flip); paint(LEGS[legs], ox, oy + 17, flip);
-    if (L.cap) { const cc = L.cap; px(c, OUT, ox + 4, oy + bob, 8, 1); px(c, cc, ox + 4, oy + 1 + bob, 8, 2); px(c, shade(cc, .7), ox + 4, oy + 3 + bob, 8, 1); if (d !== 3) px(c, cc, ox + (flip ? 1 : d === 2 ? 10 : 3), oy + 3 + bob, d === 0 ? 10 : 5, 1); }
+    if (L.founder) { founderCape(c, ox, oy, d, bob, f, true); founderTrim(c, ox, oy, d, bob); return; }
+    if (L.cap) { const cc = L.cap; px(c, OUT, ox + 4, oy + bob, 8, 1); px(c, cc, ox + 4, oy + 1 + bob, 8, 2); px(c, shade(cc, .7), ox + 4, oy + 3 + bob, 8, 1); if (d !== 3) px(c, cc, ox + (d === 0 ? 3 : d === 1 ? 1 : 10), oy + 3 + bob, d === 0 ? 10 : 5, 1); }
   }));
   sheets.set(L.key, cv);
   return cv;
+}
+// Founder look: royal cape (behind the body, or over it from the back), gold crown with a ruby, gold belt.
+const ROYAL = { cape: '#b0243a', capeD: '#7a1428', trim: '#ffcc33', gold: '#ffcc33', goldD: '#c8901a', goldL: '#fff3c4', gem: '#4fd3ff' };
+function founderCape(c, ox, oy, d, bob, f, front) {
+  const sway = f === 1 ? 1 : f === 2 ? -1 : 0;
+  if (!front && d === 0) { // front view: cape shows at the shoulders and between the legs
+    px(c, OUT, ox + 1, oy + 11 + bob, 14, 10); px(c, ROYAL.capeD, ox + 2, oy + 12 + bob, 12, 8); px(c, ROYAL.cape, ox + 2, oy + 12 + bob, 3, 7); px(c, ROYAL.cape, ox + 11, oy + 12 + bob, 3, 7);
+    px(c, ROYAL.trim, ox + 2, oy + 19 + bob, 12, 1);
+  }
+  if (!front && (d === 1 || d === 2)) { // side view: cape flows out behind
+    const back = d === 1 ? 1 : -1, x = d === 1 ? ox + 9 : ox + 2;
+    px(c, OUT, x - 1, oy + 11 + bob, 7, 10); px(c, ROYAL.cape, x, oy + 12 + bob, 5, 8); px(c, ROYAL.capeD, x + (back > 0 ? 3 : 0), oy + 12 + bob, 2, 8);
+    px(c, ROYAL.cape, x + (back > 0 ? 4 : -1) + sway * back, oy + 16 + bob, 2, 4); px(c, ROYAL.trim, x, oy + 19 + bob, 5, 1);
+  }
+  if (front && d === 3) { // back view: the cape covers the back
+    px(c, OUT, ox + 2, oy + 11 + bob, 12, 8); px(c, ROYAL.cape, ox + 3, oy + 11 + bob, 10, 7); px(c, ROYAL.capeD, ox + 3, oy + 11 + bob, 2, 7); px(c, ROYAL.capeD, ox + 8, oy + 13 + bob, 1, 4);
+    px(c, ROYAL.trim, ox + 3, oy + 17 + bob, 10, 1); px(c, ROYAL.trim, ox + 3, oy + 11 + bob, 10, 1);
+  }
+}
+function founderTrim(c, ox, oy, d, bob) {
+  // crown
+  const cx = ox + (d === 1 ? 4 : d === 2 ? 5 : 4), y = oy + bob + 1;
+  px(c, OUT, cx - 1, y, 10, 5); px(c, ROYAL.gold, cx, y + 2, 8, 2); px(c, ROYAL.goldD, cx, y + 3, 8, 1);
+  [0, 3, 6].forEach(i => { px(c, OUT, cx + i - 0, y - 1, 2, 1); px(c, ROYAL.gold, cx + i, y, 2, 2); });
+  px(c, ROYAL.goldL, cx, y, 1, 1); if (d !== 3) px(c, ROYAL.gem, cx + 3, y + 2, 2, 1);
+  // gold belt and clasp
+  if (d !== 3) { px(c, ROYAL.gold, ox + (d === 0 ? 3 : 4), oy + 15 + bob, d === 0 ? 10 : 6, 1); px(c, ROYAL.goldL, ox + (d === 0 ? 7 : 6), oy + 15 + bob, 2, 1); }
+  if (d === 0) { px(c, ROYAL.gold, ox + 3, oy + 12 + bob, 1, 1); px(c, ROYAL.gold, ox + 12, oy + 12 + bob, 1, 1); } // cape clasps
 }
 function drawChar(c, p) {
   const sh = sheetFor(p.look), frame = p.anim ? 1 + (Math.floor(p.anim) % 2) : 0;
@@ -650,11 +682,19 @@ function renderWorld(now, V) {
     glow(x, y, l.r * fl, l.c, .75);
   }
   if (V.glowAt) glow(V.glowAt.x - cx, V.glowAt.y - cy - 8, 40, [180, 170, 220], .35); // a little light around you
+  for (const p of chars) if (p.founder) glow(p.x - cx, p.y - cy - 10, 34 + Math.sin(t * 2.4) * 4, [255, 200, 90], .55); // royal aura
   if (!reduced) flies.forEach(f => { const x = f.x - cx, y = f.y - cy; if (Math.sin(f.ph * 2) > 0) glow(x, y, 7, [200, 255, 120], .5); });
   c.globalCompositeOperation = 'multiply'; c.drawImage(V.light, 0, 0);
   c.globalCompositeOperation = 'source-over';
   c.save(); c.translate(-cx, -cy);
   if (!reduced) flies.forEach(f => { if (Math.sin(f.ph * 2) > 0) px(c, '#e8ff9a', Math.round(f.x), Math.round(f.y)); });
+  for (const p of chars) if (p.founder && !reduced) { // golden sparkles circling the founder
+    for (let i = 0; i < 5; i++) {
+      const a = t * 1.6 + i * 1.2566, r = 11 + Math.sin(t * 3 + i) * 2, sx = Math.round(p.x + Math.cos(a) * r), sy = Math.round(p.y - 10 + Math.sin(a) * r * .55);
+      const on = Math.sin(t * 6 + i * 2) > -.3; if (!on) continue;
+      px(c, i % 2 ? '#fff3c4' : '#ffcc33', sx, sy); if (Math.sin(t * 6 + i * 2) > .8) { px(c, '#ffcc33', sx - 1, sy); px(c, '#ffcc33', sx + 1, sy); px(c, '#ffcc33', sx, sy - 1); px(c, '#ffcc33', sx, sy + 1); }
+    }
+  }
   c.restore();
 }
 function drawSign(c, b) {
@@ -692,8 +732,15 @@ function render(now) {
   for (const p of chars) {
     const name = p.nick, nw = Math.round(c.measureText(name).width);
     const nx = Math.round(p.x), ny = Math.round(p.y) - 26;
-    px(c, 'rgba(20,15,35,.75)', nx - nw / 2 - 3, ny - 9, nw + 6, 11);
-    c.fillStyle = p === me ? '#ffcc33' : '#f3ecd6'; c.fillText(name, nx, ny);
+    if (p.founder) { // royal name plate with stars
+      const w = nw + 22;
+      px(c, OUT, nx - w / 2 - 1, ny - 11, w + 2, 15); px(c, '#7a1428', nx - w / 2, ny - 10, w, 13); px(c, '#ffcc33', nx - w / 2, ny + 2, w, 1); px(c, '#ffcc33', nx - w / 2, ny - 10, w, 1);
+      c.fillStyle = '#ffcc33'; c.fillText('★', nx - w / 2 + 6, ny); c.fillText('★', nx + w / 2 - 5, ny);
+      c.fillStyle = '#fff3c4'; c.fillText(name, nx, ny);
+    } else {
+      px(c, 'rgba(20,15,35,.75)', nx - nw / 2 - 3, ny - 9, nw + 6, 11);
+      c.fillStyle = p === me ? '#ffcc33' : '#f3ecd6'; c.fillText(name, nx, ny);
+    }
     const em = p === me ? (now - (I.myEmoteAt || 0) < 3000 ? I.myEmote : '') : (p.emoteUntil > now ? p.emote : '');
     if (em) {
       const txt = EMOTE_TEXT[em] || em, bw = Math.round(c.measureText(txt).width + 10), by = ny - 26;
@@ -839,16 +886,16 @@ function enterChannel(ch) {
   });
 }
 // The server sends full profiles once (enter ack, 'island:join') and then only compact position deltas.
-function addOther(id, nick, addr, elo, x, y, fl, emote) {
+function addOther(id, nick, addr, elo, x, y, fl, emote, founder) {
   let o = I.others.get(id);
   if (!o) { o = { id, x, y, tx: x, ty: y, anim: 0 }; I.others.set(id, o); }
-  Object.assign(o, { nick, elo, look: lookOf(addr), tx: x, ty: y, dir: fl & 3, moving: !!(fl & 4) });
+  Object.assign(o, { nick, elo, founder: !!founder, look: lookOf(addr, !!founder), tx: x, ty: y, dir: fl & 3, moving: !!(fl & 4) });
   if (emote) { o.emote = emote; o.emoteUntil = performance.now() + 3000; }
 }
 const countChanged = () => I.onCount && I.onCount(I.others.size + 1, I.channel, I.cap);
 function applyFull(list, myId) {
   I.others.clear();
-  for (const [id, nick, addr, elo, x, y, fl, emote] of list) if (id !== myId) addOther(id, nick, addr, elo, x, y, fl, emote);
+  for (const row of list) if (row[0] !== myId) addOther(...row);
   countChanged();
 }
 function applyPos(arr, myId) {
@@ -876,7 +923,7 @@ window.Island = {
     container.appendChild(I.canvas);
     let start = SPAWN;
     try { const s = JSON.parse(localStorage.getItem('ff-island-pos') || 'null'); if (s && walkable(s.x, s.y)) start = s; } catch (e) {}
-    I.me = { id: me.id, nick: me.nickname, x: start.x, y: start.y, dir: 0, moving: false, anim: 0, look: lookOf(me.address) };
+    I.me = { id: me.id, nick: me.nickname, founder: !!me.founder, x: start.x, y: start.y, dir: 0, moving: false, anim: 0, look: lookOf(me.address, !!me.founder) };
     I.path = []; I.pending = null; I.inside = null; I.keys = {};
     I.cooldownDoor = (BUILDINGS.find(b => Math.abs(start.x - b.door.x) < 10 && Math.abs(start.y - b.door.y) < 9) || {}).id || null;
     resize();

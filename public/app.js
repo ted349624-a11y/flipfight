@@ -137,7 +137,8 @@ function tierBadge(elo, compact) {
 }
 const PLACE_COL = ['#ffcc33', '#d6dde8', '#d38a52'];
 function trophies(badges) {
-  return (badges || []).slice(0, 3).map(b => `<span class="trophy" style="color:${PLACE_COL[b.place - 1]}" title="#${b.place} in Season ${b.season}">${TROPHY}<em>S${b.season}</em></span>`).join('');
+  const list = badges || [], founder = list.some(b => b.founder);
+  return (founder ? '<span class="founder-tag" title="Flipfight founder">★ FOUNDER</span>' : '') + list.filter(b => b.place).slice(0, 3).map(b => `<span class="trophy" style="color:${PLACE_COL[b.place - 1]}" title="#${b.place} in Season ${b.season}">${TROPHY}<em>S${b.season}</em></span>`).join('');
 }
 
 function backEl() { const d = document.createElement('div'); d.className = 'back bigback'; return d; }
@@ -199,10 +200,10 @@ function updateTop() {
   const p = S.me; if (!p) return;
   $('bal').textContent = fmt(p.balance); $('elo').textContent = p.elo;
   if (S.cfg) $('tierTop').innerHTML = `${tierBadge(p.elo)}`;
-  $('nick').textContent = p.nickname || ''; $('addr').textContent = shortAddr(p.address);
+  $('nick').textContent = (p.founder ? '★ ' : '') + (p.nickname || ''); $('addr').textContent = shortAddr(p.address);
   $('sfx').setAttribute('aria-pressed', S.sfx); $('sfx').textContent = S.sfx ? 'SFX ON' : 'SFX OFF';
   $('musicBtn').setAttribute('aria-pressed', FX.musicOn()); $('musicBtn').textContent = FX.musicOn() ? 'MUSIC ON' : 'MUSIC OFF';
-  $('hudNick').textContent = p.nickname || ''; $('hudBal').textContent = fmt(p.balance);
+  $('hudNick').textContent = (p.founder ? '★ ' : '') + (p.nickname || ''); $('hudBal').textContent = fmt(p.balance);
   if (S.cfg) $('hudTier').innerHTML = `${tierBadge(p.elo)} <span class="num">${p.elo}</span>`;
   $('hudMusic').setAttribute('aria-pressed', FX.musicOn());
   const sb = document.querySelector('#islandQuick [data-act=sfx]'); if (sb) sb.textContent = S.sfx ? 'SOUND FX: ON' : 'SOUND FX: OFF';

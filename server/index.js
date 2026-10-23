@@ -33,6 +33,16 @@ const keyOk = k => !!PREVIEW_KEY && String(k || '').trim() === PREVIEW_KEY;
 const hasPreview = (cookieHeader, headerKey) => keyOk(readCookie(cookieHeader, PREVIEW_COOKIE)) || keyOk(headerKey);
 const GAME_PAGES = new Set(['/', '/index.html']);
 
+// Founder: wallets listed in FOUNDER_ADDRESSES (comma-separated) get the royal character, a FOUNDER badge
+// and, if FOUNDER_NICK is set, that nickname (reserved so nobody else can take it).
+const FOUNDERS = new Set((process.env.FOUNDER_ADDRESSES || '').split(',').map(a => a.trim().toLowerCase()).filter(a => /^0x[0-9a-f]{40}$/.test(a)));
+const FOUNDER_NICK = /^[A-Za-z0-9_]{3,16}$/.test((process.env.FOUNDER_NICK || '').trim()) ? process.env.FOUNDER_NICK.trim() : '';
+const founderIds = new Set(); // user ids of founder wallets, filled at startup and on sign-in
+const isFounder = u => !!u && FOUNDERS.has(String(u.address).toLowerCase());
+// Names only the founder may use, so nobody can pose as staff.
+const RESERVED = /^(admin|administrator|dev|developer|founder|official|support|moderator|mod|staff|system)$|flipfight/i;
+const reservedNick = n => RESERVED.test(n) || (FOUNDER_NICK && n.toLowerCase() === FOUNDER_NICK.toLowerCase());
+
 const app = express();
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
@@ -125,7 +135,7 @@ async function createUser(address) {
 
 function publicProfile(u) {
   return {
-    id: u.id, address: u.address, nickname: u.nickname, balance: u.balance, elo: u.elo, tier: G.tierOf(u.elo).id,
+    id: u.id, address: u.address, nickname: u.nickname, founder: isFounder(u), balance: u.balance, elo: u.elo, tier: G.tierOf(u.elo).id,
     wins: u.wins, losses: u.losses, draws: u.draws, freePacks: u.free_packs,
     season: { played: u.season_played || 0, wins: u.season_wins || 0, losses: u.season_losses || 0, draws: u.season_draws || 0 },
     bonusReadyIn: Math.max(0, u.last_bonus + G.ECONOMY.dailyBonusMs - now()),
@@ -134,6 +144,7 @@ function publicProfile(u) {
 // Top-3 season finishes, as permanent badges: { userId: [{ season, place }] }
 async function badgesOf(ids) {
   const out = {};
+  for (const id of ids) if (founderIds.has(id)) out[id] = [{ founder: true }];
   if (!ids.length) return out;
   for (const r of await db.all('SELECT user_id, season, place FROM season_results WHERE place <= 3 AND user_id = ANY($1::int[]) ORDER BY season DESC', [ids]))
     (out[r.user_id] = out[r.user_id] || []).push({ season: r.season, place: r.place });
@@ -221,7 +232,14 @@ app.post('/api/login', route(async (req, res) => {
   try { recovered = verifyMessage(row.message, signature).toLowerCase(); } catch {}
   if (recovered !== address) return fail(res, 401, 'Signature does not match this wallet.');
   await db.query('DELETE FROM nonces WHERE address = $1', [address]);
-  const user = (await q.userByAddress(address)) || (await createUser(address));
+  let user = (await q.userByAddress(address)) || (await createUser(address));
+  if (isFounder(user)) {
+    founderIds.add(user.id);
+    if (FOUNDER_NICK && user.nickname !== FOUNDER_NICK) {
+      try { await db.query('UPDATE users SET nickname = $1 WHERE id = $2', [FOUNDER_NICK, user.id]); user = await q.userById(user.id); }
+      catch (e) { if (e.code === '23505') console.warn(`FOUNDER_NICK "${FOUNDER_NICK}" is already used by another player.`); else throw e; }
+    }
+  }
   const token = crypto.randomBytes(32).toString('hex');
   await db.query('INSERT INTO sessions(token, user_id, expires_at) VALUES($1,$2,$3)', [token, user.id, now() + SESSION_MS]);
   res.json({ token, profile: publicProfile(user) });
@@ -251,6 +269,7 @@ app.post('/api/nickname', auth, route(async (req, res) => {
   const nick = String(req.body.nickname || '').trim();
   if (!/^[A-Za-z0-9_]{3,16}$/.test(nick)) return fail(res, 400, 'Use 3–16 letters, numbers or underscores.');
   if (req.user.nickname) return fail(res, 400, 'Your nickname is already set.');
+  if (reservedNick(nick) && !isFounder(req.user)) return fail(res, 400, 'That nickname is reserved. Try another one.');
   try {
     await db.query('UPDATE users SET nickname = $1 WHERE id = $2 AND nickname IS NULL', [nick, req.user.id]);
   } catch (e) {
@@ -521,7 +540,7 @@ io.use((socket, next) => {
 
 const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf });
 const seasons = createSeasons({ db, G, io });
-const island = createIsland({ io, q, G });
+const island = createIsland({ io, q, G, isFounderId: id => founderIds.has(id) });
 // Live feeds are only sent to players looking at the screen that shows them.
 const WATCH = { lobby: 'w:lobby', market: 'w:market' };
 io.on('connection', socket => {
@@ -540,6 +559,7 @@ setInterval(() => {
 }, 60 * 60 * 1000).unref();
 
 db.init()
+  .then(async () => { if (FOUNDERS.size) for (const r of await db.all('SELECT id FROM users WHERE address = ANY($1::text[])', [[...FOUNDERS]])) founderIds.add(r.id); })
   .then(() => seasons.start())
   .then(() => server.listen(PORT, () => console.log(`Flipfight running on http://localhost:${PORT}`)))
   .catch(err => { console.error('Could not connect to the database:', err.message); process.exit(1); });

@@ -15,13 +15,13 @@ const EMOTES = ['hi', 'gg', 'wow', 'lol', 'fire', 'heart'];
 const TICK_MS = 200;
 const CHANNEL_CAP = Number(process.env.ISLAND_CHANNEL_CAP) || 50;
 
-function createIsland({ io, q }) {
+function createIsland({ io, q, isFounderId = () => false }) {
   const players = new Map();  // userId -> { id, nick, addr, elo, x, y, dir, moving, emote, emoteAt, lastMove, socketId, dirty, ch }
   const channels = new Map(); // channel number -> Set of userIds
 
   const room = ch => 'island:' + ch;
   const flags = p => (p.dir & 3) | (p.moving ? 4 : 0);
-  const full = p => [p.id, p.nick, p.addr, p.elo, Math.round(p.x), Math.round(p.y), flags(p), p.emote && Date.now() - p.emoteAt < 3000 ? p.emote : ''];
+  const full = p => [p.id, p.nick, p.addr, p.elo, Math.round(p.x), Math.round(p.y), flags(p), p.emote && Date.now() - p.emoteAt < 3000 ? p.emote : '', isFounderId(p.id) ? 1 : 0];
   const clampX = v => Math.max(0, Math.min(WORLD.w, Number(v) || 0));
   const clampY = v => Math.max(0, Math.min(WORLD.h, Number(v) || 0));
   const list = () => [...channels.entries()].sort((a, b) => a[0] - b[0]).map(([id, set]) => ({ id, players: set.size, cap: CHANNEL_CAP }));

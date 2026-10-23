@@ -104,6 +104,15 @@ public/            Oyun arayüzü (HTML, CSS, JS)
 scripts/smoke-test.js  Uçtan uca test
 ```
 
+## Kurucu (founder) hesabı
+
+Render → Environment kısmına ekle:
+
+- `FOUNDER_ADDRESSES` = cüzdan adresin (birden fazlaysa virgülle ayır)
+- `FOUNDER_NICK` = istediğin nick (isteğe bağlı, 3–16 harf/rakam/alt çizgi)
+
+Bu cüzdan bağlanınca: taçlı, pelerinli kraliyet karakteri, etrafında altın parıltılar, adada kırmızı-altın isim plakası ve her yerde ★ FOUNDER rozeti. `FOUNDER_NICK` girildiyse hesabın nicki girişte otomatik o olur ve bu isim başkasına kapanır. "admin", "dev", "founder", içinde "flipfight" geçen isimler gibi resmi görünen nickler de sadece kurucuya açık.
+
 ## Ölçek ve trafik
 
 Render'ın ücretsiz planında aylık dahil trafik 5 GB, CPU 0.1. Trafiği düşük tutmak için:
