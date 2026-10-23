@@ -254,7 +254,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
   res.json({ season: G.SEASON, tiers: G.TIERS, rewards: Array.from({ length: G.SEASON.paidPlaces }, (_, i) => G.seasonReward(i + 1)), market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit },
-    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID });
+    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {

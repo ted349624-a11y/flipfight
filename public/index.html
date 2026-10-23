@@ -151,6 +151,7 @@
       <div class="outcome"><span class="verdict" id="verdict"></span><span class="calc" id="calc"></span></div>
     </div>
     <div class="cards hand" id="hand"></div>
+    <div class="face-pick" id="facePick" hidden></div>
     <div class="row" style="justify-content:center">
       <button class="btn" id="lock" disabled>Lock card</button>
       <button class="btn ghost" id="quitPractice" hidden>Quit practice</button>
@@ -337,6 +338,22 @@
         <p class="cycle g-cycle"><span class="e e-fire">FIRE</span>›<span class="e e-wind">WIND</span>›<span class="e e-earth">EARTH</span>›<span class="e e-water">WATER</span>›<span class="e e-fire">FIRE</span></p>
         <p>Each element beats the next one in the cycle: fire beats wind, wind beats earth, earth beats water, water beats fire. A card that beats its opponent's element gets <b>+30% power</b>. Every other pairing (fire vs earth, wind vs water, same element) is neutral.</p>
         <p>During a match you can see the <b>elements</b> of your opponent's remaining cards as coloured squares under their name, but not which one they'll play. Cards in your hand show <b class="g-good">▲</b> when they beat more of those elements than they lose to, and <b class="g-bad">▼</b> when they're at risk.</p>
+      </div>
+
+      <div class="g-block">
+        <h3>FLIP CARDS: EVERY CARD HAS TWO SIDES</h3>
+        <p>Each card has a <b>front</b> and a <b>back</b>. When you pick a card in a match you also choose <b>which side faces up</b>. The back is a little weaker and has <b>another element</b> plus an <b>ability</b>. Your opponent sees the front and back elements of your remaining cards, never which side you'll play. Tap <b>↻</b> on a card in your collection to see its back.</p>
+        <div class="tblwrap"><table class="g-table">
+          <thead><tr><th>Ability</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><b>FLIP TRAP</b></td><td>Turns the opponent's card to its other side before the clash; the flipped card gets −8 power.</td></tr>
+            <tr><td><b>SHIELD</b></td><td>Wins the round on a tie.</td></tr>
+            <tr><td><b>ECHO</b></td><td>Element bonus is +60% instead of +30%.</td></tr>
+            <tr><td><b>AMBUSH</b></td><td>+20 power against a card that costs more energy.</td></tr>
+            <tr><td><b>RALLY</b></td><td>Your next card gets +10 power.</td></tr>
+            <tr><td><b>DRAIN</b></td><td>Your opponent loses 2 energy.</td></tr>
+          </tbody>
+        </table></div>
       </div>
 
       <div class="g-block">

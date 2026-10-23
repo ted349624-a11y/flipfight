@@ -78,9 +78,9 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       if (!deckRow) throw new Error('Build a practice deck first.');
       const { cards } = await validateDeck(userId, G.PRACTICE.id, JSON.parse(deckRow.card_uids));
       const u = await q.userById(userId);
-      const human = { userId: u.id, nickname: u.nickname, elo: u.elo, hand: cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
+      const human = { userId: u.id, nickname: u.nickname, elo: u.elo, hand: cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
       const botP = { userId: BOT_ID, isBot: true, nickname: `Training Bot · ${G.BOT_LEVELS[level].name}`, elo: G.BOT_LEVELS[level].elo,
-        hand: bot.buildDeck(cards), used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
+        hand: bot.buildDeck(cards), used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
       const m = { id: crypto.randomUUID(), room: G.PRACTICE, practice: true, level, players: [human, botP], round: 1, phase: 'pick', deadline: 0, timer: null, botTimer: null, log: [] };
       matches.set(m.id, m);
       userMatch.set(userId, m.id);
@@ -94,7 +94,8 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     const b = m.players.find(p => p.isBot);
     if (!b || m.phase !== 'pick' || b.pick !== null) return;
     const human = m.players.find(p => !p.isBot);
-    b.pick = bot.choose(m.level, b, human).uid;
+    const choice = bot.choose(m.level, b, human);
+    b.pick = choice.card.uid; b.face = choice.face;
     if (m.players.every(x => x.pick !== null)) resolveRound(m);
     else emitState(m);
   }
@@ -132,7 +133,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
   async function startMatch(id, room, a, b) {
     const mk = async e => {
       const u = await q.userById(e.userId);
-      return { userId: u.id, nickname: u.nickname, elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, auto: false };
+      return { userId: u.id, nickname: u.nickname, elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
     };
     const m = { id, room, players: [await mk(a), await mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [] };
     matches.set(m.id, m);
@@ -143,7 +144,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
   function startRound(m) {
     m.phase = 'pick';
     m.deadline = Date.now() + G.MATCH.turnMs;
-    m.players.forEach(p => { p.pick = null; p.auto = false; });
+    m.players.forEach(p => { p.pick = null; p.face = 0; p.auto = false; });
     clearTimeout(m.timer);
     m.timer = setTimeout(() => timeoutRound(m), G.MATCH.turnMs + 500);
     emitState(m);
@@ -156,22 +157,30 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       matchId: m.id,
       room: { id: m.room.id, name: m.room.name, stake: m.room.stake, practice: !!m.practice, level: m.level || null },
       round: m.round, phase: m.phase, deadline: m.deadline, serverNow: Date.now(),
-      you: { nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick },
+      you: { nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick, face: me.face, bonus: me.bonus },
       opp: {
-        nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null,
+        nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null, bonus: op.bonus,
         leftElements: op.hand.filter(c => !op.used.includes(c.uid)).map(c => c.el),
+        leftSides: op.hand.filter(c => !op.used.includes(c.uid)).map(c => [c.el, c.back.el]),
       },
       log: m.log.map(r => ({
-        round: r.round, mine: r.cards[idx], theirs: r.cards[1 - idx], myPower: r.powers[idx], theirPower: r.powers[1 - idx],
+        round: r.round, mine: played(r, idx), theirs: played(r, 1 - idx), myPower: r.powers[idx], theirPower: r.powers[1 - idx],
         myExhausted: r.exhausted[idx], theirExhausted: r.exhausted[1 - idx], myAuto: r.auto[idx],
+        myEvents: r.events[idx], theirEvents: r.events[1 - idx],
         result: r.winner === null ? 'tie' : r.winner === idx ? 'win' : 'loss',
       })),
     };
   }
 
+  // the card as it ended up face up in a round (after any FLIP TRAP)
+  function played(r, i) {
+    const c = r.cards[i], f = G.faceOf(c, r.faces[i]);
+    return { ...c, name: f.name, el: f.el, pow: f.pow, ab: f.ab, face: r.faces[i], chosenFace: r.chosen[i], flipped: r.flipped[i] };
+  }
+
   function emitState(m) { m.players.forEach((p, i) => emitTo(p.userId, 'match:state', viewFor(m, i))); }
 
-  function pick(userId, matchId, uid) {
+  function pick(userId, matchId, uid, face) {
     const m = matches.get(matchId);
     if (!m || userMatch.get(userId) !== matchId) throw new Error('This match is over.');
     if (m.phase !== 'pick') throw new Error('Wait for the next round.');
@@ -179,7 +188,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     if (p.pick !== null) throw new Error('You already locked a card this round.');
     const card = p.hand.find(c => c.uid === uid);
     if (!card || p.used.includes(uid)) throw new Error('That card is not available.');
-    p.pick = uid;
+    p.pick = uid; p.face = face === 1 ? 1 : 0;
     if (m.players.every(x => x.pick !== null)) resolveRound(m);
     else emitState(m);
   }
@@ -201,13 +210,12 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     const cards = m.players.map(p => p.hand.find(c => c.uid === p.pick));
     const exhausted = m.players.map((p, i) => cost(cards[i]) > p.energy);
     m.players.forEach((p, i) => { if (!exhausted[i]) p.energy -= cost(cards[i]); p.used.push(p.pick); });
-    const powers = [
-      G.effectivePower(cards[0], exhausted[0], cards[1].el),
-      G.effectivePower(cards[1], exhausted[1], cards[0].el),
-    ];
-    const winner = powers[0] > powers[1] ? 0 : powers[1] > powers[0] ? 1 : null;
+    const [a, b] = m.players;
+    const res = G.clash({ card: cards[0], face: a.face, exhausted: exhausted[0], bonus: a.bonus }, { card: cards[1], face: b.face, exhausted: exhausted[1], bonus: b.bonus });
+    m.players.forEach((p, i) => { p.energy = Math.max(0, p.energy - res.drain[i]); p.bonus = res.nextBonus[i]; });
+    const { powers, winner } = res;
     if (winner !== null) m.players[winner].wins++;
-    m.log.push({ round: m.round, cards, powers, exhausted, auto: m.players.map(p => p.auto), winner });
+    m.log.push({ round: m.round, cards, chosen: [a.face, b.face], faces: res.faces, flipped: res.flipped, events: res.events, powers, exhausted, auto: m.players.map(p => p.auto), winner });
     emitState(m);
     const over = m.players.some(p => p.wins >= G.MATCH.winsNeeded) || m.log.length >= G.MATCH.rounds;
     m.timer = setTimeout(() => {
@@ -302,7 +310,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
     }));
     socket.on('practice:start', (data, fn) => handle(fn, async () => ({ matchId: await startPractice(userId, String(data && data.level)) })));
     socket.on('match:quit', (data, fn) => handle(fn, () => { quitPractice(userId); return {}; }));
-    socket.on('match:pick', (data, fn) => handle(fn, () => { pick(userId, String(data && data.matchId), Number(data && data.uid)); return {}; }));
+    socket.on('match:pick', (data, fn) => handle(fn, () => { pick(userId, String(data && data.matchId), Number(data && data.uid), Number(data && data.face)); return {}; }));
 
     socket.on('disconnect', () => {
       if (sockets.get(userId) !== socket) return;

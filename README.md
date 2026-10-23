@@ -107,6 +107,10 @@ public/            Oyun arayüzü (HTML, CSS, JS)
 scripts/smoke-test.js  Uçtan uca test
 ```
 
+## Çift yüzlü kartlar (Flip)
+
+Her kartın bir ön ve bir arka yüzü var. Maçta kartı seçince hangi yüzünün açılacağını da seçersin. Arka yüz biraz daha zayıftır (%93–98 güç) ama başka bir elementi ve bir yeteneği vardır: FLIP TRAP (rakibin kartını ters çevirir, çevrilen kart −8), SHIELD (beraberliği kazanır), ECHO (element bonusu +%60), AMBUSH (daha pahalı karta karşı +20), RALLY (sonraki kartın +10), DRAIN (rakip 2 enerji kaybeder). Denge `scripts/bot-sim.js` ile ayarlandı: iki yüzü de kullanan oyuncu hiç çevirmeyene karşı ~%60 kazanıyor.
+
 ## Kurucu (founder) hesabı
 
 Render → Environment kısmına ekle:

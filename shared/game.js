@@ -27,6 +27,29 @@ const TEMPLATES = [
   ['Puddle Imp', 'water', 'common', 21], ['Cinder Hawk', 'fire', 'rare', 45], ['Gale Lynx', 'wind', 'rare', 49],
 ];
 
+// Flip side of every card: [name, element, power, ability] — same index as TEMPLATES.
+// When you play a card you choose which side faces up. The back is a little weaker (93–98% power) but has another
+// element and an ability. Balanced with scripts/bot-sim.js: a player who uses both sides beats one who never flips ~60%.
+const BACKS = [
+  ['Ash Fox', 'wind', 27, 'shield'], ['Husk Beetle', 'earth', 22, 'trap'], ['Rain Sparrow', 'water', 25, 'rally'],
+  ['Shell Tortoise', 'water', 29, 'shield'], ['Sand Crab', 'earth', 25, 'ambush'], ['Obsidian Golem', 'earth', 47, 'shield'],
+  ['Thunder Eagle', 'fire', 51, 'echo'], ['Thorn Warden', 'wind', 43, 'trap'], ['Ice Whale', 'wind', 49, 'drain'],
+  ['Storm Drake', 'water', 68, 'rally'], ['Kraken Lord', 'earth', 63, 'trap'], ['Reborn Phoenix', 'water', 92, 'echo'],
+  ['Sand Djinn', 'fire', 25, 'drain'], ['Night Bat', 'water', 21, 'ambush'], ['Reef Keeper', 'earth', 46, 'rally'],
+  ['Iron Titan', 'fire', 70, 'shield'], ['Smoke Wolf', 'wind', 61, 'ambush'], ['Void Leviathan', 'earth', 90, 'drain'],
+  ['Ancient Treant', 'water', 93, 'shield'], ['Storm Serpent', 'wind', 84, 'trap'], ['Bog Toad', 'water', 22, 'echo'],
+  ['Steam Imp', 'fire', 20, 'trap'], ['Ember Hawk', 'wind', 42, 'ambush'], ['Frost Lynx', 'water', 48, 'echo'],
+];
+const ABILITIES = {
+  shield: { name: 'SHIELD', text: 'Wins the round on a tie.' },
+  trap: { name: 'FLIP TRAP', text: "Flips the opponent's card to its other side before the clash; the flipped card gets −8 power." },
+  drain: { name: 'DRAIN', text: 'Your opponent loses 2 energy.' },
+  rally: { name: 'RALLY', text: 'Your next card gets +10 power.' },
+  echo: { name: 'ECHO', text: 'Your element bonus is +60% instead of +30%.' },
+  ambush: { name: 'AMBUSH', text: '+20 power against a card that costs more energy.' },
+};
+const ABILITY_NUM = { rally: 10, ambush: 20, drain: 2, echo: 1.6, element: 1.3, trapStun: 8 };
+
 const ROOMS = [
   { id: 1, name: 'ROOM 1 · ROOKIE', stake: 20000, limit: 220, rake: 0.05 },
   { id: 2, name: 'ROOM 2 · VETERAN', stake: 100000, limit: 320, rake: 0.05 },
@@ -129,13 +152,52 @@ const CHAIN_ID = 4663; // Robinhood Chain mainnet (sign-in messages only; nothin
 const MATCH = { energy: 15, rounds: 5, winsNeeded: 3, turnMs: 20000, revealMs: 2600, deckSize: 5 };
 
 function cardView(row) {
-  const t = TEMPLATES[row.tpl];
-  return { uid: row.uid, tpl: row.tpl, name: t[0], el: t[1], rar: t[2], pow: t[3], tid: '#' + String(row.token_no).padStart(4, '0') };
+  const t = TEMPLATES[row.tpl], b = BACKS[row.tpl];
+  return { uid: row.uid, tpl: row.tpl, name: t[0], el: t[1], rar: t[2], pow: t[3], tid: '#' + String(row.token_no).padStart(4, '0'),
+    back: { name: b[0], el: b[1], pow: b[2], ab: b[3] } };
 }
+// The side of a card that is face up: 0 = front (no ability), 1 = back (with an ability).
+function faceOf(card, face) { return face === 1 ? card.back : { name: card.name, el: card.el, pow: card.pow, ab: null }; }
 
 function effectivePower(card, exhausted, vsElement) {
-  const elementBonus = ELEMENTS[card.el].beats === vsElement ? 1.3 : 1;
+  const elementBonus = ELEMENTS[card.el].beats === vsElement ? ABILITY_NUM.element : 1;
   return Math.round(card.pow * elementBonus * (exhausted ? 0.5 : 1));
 }
 
-module.exports = { SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+// One round. a and b are { card, face, exhausted, bonus } (bonus = +power from an earlier RALLY).
+// Order: FLIP TRAPs turn the other card over (both at once), then power =
+//   (side power + rally bonus + ambush − 8 if trapped) x element bonus (1.3, or 1.6 with ECHO) x 0.5 if exhausted.
+// Ties go to a SHIELD (if only one side has it). DRAIN and RALLY take effect after the round.
+function clash(a, b) {
+  const S = [a, b];
+  const traps = S.map(x => faceOf(x.card, x.face).ab === 'trap');
+  const faces = [traps[1] ? 1 - a.face : a.face, traps[0] ? 1 - b.face : b.face];
+  const F = faces.map((f, i) => faceOf(S[i].card, f));
+  const costs = S.map(x => RARITIES[x.card.rar].cost);
+  const events = [[], []];
+  traps.forEach((t, i) => { if (t) events[i].push('trap'); });
+  const powers = [0, 1].map(i => {
+    const me = F[i], them = F[1 - i];
+    let flat = S[i].bonus || 0;
+    if (flat) events[i].push('rallied');
+    if (traps[1 - i]) flat -= ABILITY_NUM.trapStun; // this card was flipped by a trap
+    if (me.ab === 'ambush' && costs[1 - i] > costs[i]) { flat += ABILITY_NUM.ambush; events[i].push('ambush'); }
+    const beats = ELEMENTS[me.el].beats === them.el;
+    if (beats && me.ab === 'echo') events[i].push('echo');
+    const mult = beats ? (me.ab === 'echo' ? ABILITY_NUM.echo : ABILITY_NUM.element) : 1;
+    return Math.max(0, Math.round((me.pow + flat) * mult * (S[i].exhausted ? 0.5 : 1)));
+  });
+  let winner = powers[0] > powers[1] ? 0 : powers[1] > powers[0] ? 1 : null;
+  if (winner === null) {
+    const sh = F.map(f => f.ab === 'shield');
+    if (sh[0] !== sh[1]) { winner = sh[0] ? 0 : 1; events[winner].push('shield'); }
+  }
+  F.forEach((f, i) => { if (f.ab === 'drain') events[i].push('drain'); if (f.ab === 'rally') events[i].push('rally'); });
+  return {
+    faces, flipped: [traps[1], traps[0]], sides: F, powers, winner, events,
+    drain: [F[1].ab === 'drain' ? ABILITY_NUM.drain : 0, F[0].ab === 'drain' ? ABILITY_NUM.drain : 0], // energy each player loses
+    nextBonus: F.map(f => (f.ab === 'rally' ? ABILITY_NUM.rally : 0)),
+  };
+}
+
+module.exports = { BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

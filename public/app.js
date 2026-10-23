@@ -110,20 +110,37 @@ const spriteSeed = c => c.tpl * 31 + 5;
 const elName = el => S.cfg.elements[el].name;
 const rar = r => S.cfg.rarities[r];
 
+// Every card has two sides. opts.face: 1 shows the back. A card that was played in a round carries its final
+// side (name/el/pow/ab already set, plus face and flipped) and is shown as is.
+const abName = ab => (ab && S.cfg.abilities && S.cfg.abilities[ab] ? S.cfg.abilities[ab].name : '');
+const abText = ab => (ab && S.cfg.abilities && S.cfg.abilities[ab] ? S.cfg.abilities[ab].text : '');
+const sideOf = (c, face) => (face === 1 && c.back ? c.back : { name: c.name, el: c.el, pow: c.pow, ab: null });
 function cardEl(c, opts = {}) {
+  const playedCard = c.face !== undefined && c.chosenFace !== undefined;
+  const face = playedCard ? c.face : opts.face === 1 && c.back ? 1 : 0;
+  const s = playedCard ? { name: c.name, el: c.el, pow: c.pow, ab: c.ab } : sideOf(c, face);
+  const other = !playedCard && c.back ? sideOf(c, 1 - face) : null;
   const b = document.createElement(opts.static ? 'div' : 'button');
-  b.className = 'card' + (opts.static ? ' static' : '');
+  b.className = 'card' + (opts.static ? ' static' : '') + (face ? ' is-back' : '') + (playedCard && c.flipped ? ' trapped' : '');
   b.style.setProperty('--rc', RAR_COLORS[c.rar]);
   if (!opts.static) b.type = 'button';
-  b.innerHTML = `<div class="ct"><span class="cost" title="Energy cost: ${rar(c.rar).cost} of your 15 energy"><svg class="bolt" viewBox="0 0 5 8" aria-hidden="true"><path d="M2 0h1v1h-1zM3 0h1v1h-1zM4 0h1v1h-1zM2 1h1v1h-1zM3 1h1v1h-1zM1 2h1v1h-1zM2 2h1v1h-1zM0 3h1v1h-1zM1 3h1v1h-1zM2 3h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM2 4h1v1h-1zM3 4h1v1h-1zM1 5h1v1h-1zM2 5h1v1h-1zM1 6h1v1h-1zM0 7h1v1h-1z" fill="currentColor"/></svg>${rar(c.rar).cost}</span><span class="el e-${c.el}">${elName(c.el)}</span></div>
-    <canvas class="art"></canvas><div class="cname">${esc(c.name)}</div>
-    <div class="cf"><span class="pow num">${c.pow}</span><span class="tid">${esc(c.tid)}</span></div><span class="rar">${rar(c.rar).name}</span>`;
-  drawSprite(b.querySelector('canvas'), spriteSeed(c), c.el, c.rar);
+  b.innerHTML = `<div class="ct"><span class="cost" title="Energy cost: ${rar(c.rar).cost} of your 15 energy"><svg class="bolt" viewBox="0 0 5 8" aria-hidden="true"><path d="M2 0h1v1h-1zM3 0h1v1h-1zM4 0h1v1h-1zM2 1h1v1h-1zM3 1h1v1h-1zM1 2h1v1h-1zM2 2h1v1h-1zM0 3h1v1h-1zM1 3h1v1h-1zM2 3h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM2 4h1v1h-1zM3 4h1v1h-1zM1 5h1v1h-1zM2 5h1v1h-1zM1 6h1v1h-1zM0 7h1v1h-1z" fill="currentColor"/></svg>${rar(c.rar).cost}</span><span class="el e-${s.el}">${elName(s.el)}</span></div>
+    <div class="artwrap"><canvas class="art"></canvas>${s.ab ? `<span class="abil" title="${esc(abText(s.ab))}">${esc(abName(s.ab))}</span>` : ''}${face ? '<span class="sidetag">BACK</span>' : ''}</div><div class="cname">${esc(s.name)}</div>
+    <div class="cf"><span class="pow num">${s.pow}</span><span class="tid">${esc(c.tid)}</span></div>
+    ${other ? `<div class="other" title="Other side: ${esc(other.name)}, ${elName(other.el)} ${other.pow}${other.ab ? ', ' + esc(abName(other.ab)) : ''}">↻ <i class="e-${other.el}"></i>${other.pow}${other.ab ? ' ' + esc(abName(other.ab)) : ''}</div>` : ''}<span class="rar">${rar(c.rar).name}</span>`;
+  drawSprite(b.querySelector('canvas'), spriteSeed(c) + (face ? 7777 : 0), s.el, c.rar);
+  if (opts.flip && c.back) {
+    const f = document.createElement('span'); f.className = 'flipbtn'; f.setAttribute('role', 'button'); f.tabIndex = 0; f.textContent = '↻';
+    f.title = 'Show the other side'; f.setAttribute('aria-label', 'Show the other side');
+    const go = e => { e.stopPropagation(); e.preventDefault(); SFX.click(); const n = cardEl(c, { ...opts, face: 1 - face }); if (b.onclick) n.onclick = b.onclick; n.className = b.className.replace(/\s*is-back/, '') + (face ? '' : ' is-back'); if (b.disabled) n.disabled = true; b.replaceWith(n); n.querySelector('.flipbtn').focus(); };
+    f.onclick = go; f.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') go(e); };
+    b.appendChild(f);
+  }
   if (opts.hint) { const h = document.createElement('span'); h.className = 'hint ' + opts.hint.cls; h.textContent = opts.hint.txt; h.title = opts.hint.title; b.appendChild(h); }
   if (opts.isNew) { const n = document.createElement('span'); n.className = 'newtag'; n.textContent = 'NEW'; b.appendChild(n); }
   if (c.listingId && !opts.noListed) { const n = document.createElement('span'); n.className = 'listedtag'; n.textContent = 'LISTED'; b.appendChild(n); }
   if (opts.price != null) { const pr = document.createElement('div'); pr.className = 'pricetag num'; pr.textContent = fmt(opts.price) + ' FLIP'; b.appendChild(pr); }
-  b.setAttribute('aria-label', `${c.name}, ${elName(c.el)}, power ${c.pow}, energy ${rar(c.rar).cost}`);
+  b.setAttribute('aria-label', `${s.name}, ${elName(s.el)}, power ${s.pow}${s.ab ? ', ' + abName(s.ab) : ''}, energy ${rar(c.rar).cost}${other ? `. Other side: ${other.name}, ${elName(other.el)} ${other.pow}` : ''}`);
   return b;
 }
 // ---------- tiers and badges ----------
@@ -180,7 +197,7 @@ function atmosphere(id) {
 let guideAutoOpened = false;
 function renderGuide() {
   if (!S.cfg || $('guideCard').firstChild) return;
-  $('guideCard').appendChild(cardEl({ uid: 0, tpl: 10, name: 'Abyss Kraken', el: 'water', rar: 'epic', pow: 68, tid: '#0421' }, { static: true }));
+  $('guideCard').appendChild(cardEl({ uid: 0, tpl: 10, name: 'Abyss Kraken', el: 'water', rar: 'epic', pow: 68, tid: '#0421', back: { name: 'Kraken Lord', el: 'earth', pow: 63, ab: 'trap' } }, { static: true, flip: true }));
 }
 function maybeOpenGuide() {
   if (guideAutoOpened || !S.me) return;
@@ -548,7 +565,7 @@ function renderDeck() {
   const pow = cs.reduce((a, c) => a + c.pow, 0), en = cs.reduce((a, c) => a + rar(c.rar).cost, 0);
   const box = $('pickGrid'); box.innerHTML = '';
   sortedCards().forEach(c => {
-    const el = cardEl(c); const on = S.sel.includes(c.uid);
+    const el = cardEl(c, { flip: true }); const on = S.sel.includes(c.uid);
     if (on) el.classList.add('sel');
     if (c.listingId) { el.classList.add('dim'); el.disabled = true; el.title = 'Listed on the Market'; box.appendChild(el); return; }
     el.setAttribute('aria-pressed', on);
@@ -630,7 +647,7 @@ function onMatchState(st) {
   S.match = st;
   if (first) {
     clearInterval(radarT); lockTabs(true); SFX.found();
-    S.matchSel = null; S.seenLog = st.log.length;
+    S.matchSel = null; S.matchFace = 0; S.seenLog = st.log.length;
     lastRevealRound = st.phase === 'reveal' && st.log.length ? st.log[st.log.length - 1].round : 0; lastBannerRound = 0; FX.clearBattle();
     $('log').innerHTML = '';
     st.log.forEach(addLogLine);
@@ -643,7 +660,8 @@ function onMatchState(st) {
 }
 function addLogLine(r) {
   const li = document.createElement('span'); li.className = r.result === 'win' ? 'w' : r.result === 'loss' ? 'l' : '';
-  li.textContent = `Round ${r.round}: ${r.mine.name} ${r.myPower} vs ${r.theirs.name} ${r.theirPower} → ${r.result === 'win' ? 'you win' : r.result === 'loss' ? 'you lose' : 'tie'}${r.myAuto ? ' (auto-played)' : ''}`;
+  const ev = r.myEvents.concat(r.theirEvents).includes('trap') ? ' · flip trap!' : '';
+  li.textContent = `Round ${r.round}: ${r.mine.name} ${r.myPower} vs ${r.theirs.name} ${r.theirPower} → ${r.result === 'win' ? 'you win' : r.result === 'loss' ? 'you lose' : 'tie'}${ev}${r.myAuto ? ' (auto-played)' : ''}`;
   $('log').appendChild(li);
 }
 function drawTimer() {
@@ -665,9 +683,9 @@ function renderMatch() {
   const m = S.match;
   const oppLeft = m.opp.leftElements;
   $('oppSide').innerHTML = `<b>${esc(m.opp.nickname)} ${trophies(m.opp.badges)}</b><span class="meta num">${m.room.practice ? '' : tierBadge(m.opp.elo, true) + ' '}ELO ${m.opp.elo} · ⚡ ${m.opp.energy}</span>
-    <div class="left" title="Elements of their remaining cards">${oppLeft.map(el => `<i class="e-${el}"></i>`).join('')}</div>
+    <div class="left" title="Their remaining cards: front and back element">${(m.opp.leftSides || oppLeft.map(e => [e, e])).map(([f, b]) => `<i class="pair"><b class="e-${f}"></b><b class="e-${b}"></b></i>`).join('')}</div>${m.opp.bonus ? `<span class="rally-note">RALLY +${m.opp.bonus}</span>` : ''}
     <span class="locked-note">${m.phase === 'pick' && m.opp.locked ? 'LOCKED IN' : ''}</span>`;
-  $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>`;
+  $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>${m.you.bonus ? `<span class="rally-note">RALLY +${m.you.bonus} on your next card</span>` : ''}`;
   $('score').textContent = `${m.opp.wins} : ${m.you.wins}`;
   $('rnd').textContent = `ROUND ${m.round}/5`;
   $('pot').textContent = m.room.practice ? 'PRACTICE · NO STAKES' : `Pot ${fmt(m.room.stake * 2)} FLIP`;
@@ -684,8 +702,10 @@ function renderMatch() {
     if (last.result === 'win') { v.textContent = 'ROUND WON'; v.style.color = 'var(--good)'; if (fresh) mc.classList.add('win-glow'); }
     else if (last.result === 'loss') { v.textContent = 'ROUND LOST'; v.style.color = 'var(--bad)'; if (fresh) oc.classList.add('win-glow'); }
     else { v.textContent = 'TIE'; v.style.color = 'var(--gold)'; }
-    const note = (c, ex, vs) => [S.cfg.elements[c.el].beats === vs ? 'element +30%' : '', ex ? 'exhausted ×0.5' : ''].filter(Boolean).join(', ');
-    const nt = note(last.theirs, last.theirExhausted, last.mine.el), nm = note(last.mine, last.myExhausted, last.theirs.el);
+    const EV = { trap: 'flip trap', rallied: `rally +${S.cfg.abilityNum.rally}`, ambush: `ambush +${S.cfg.abilityNum.ambush}`, shield: 'shield takes the tie', drain: `drain −${S.cfg.abilityNum.drain}⚡`, rally: 'rally next' };
+    const note = (c, ex, vs, evs, flipped) => [flipped ? `flipped −${S.cfg.abilityNum.trapStun}` : '', ...evs.filter(e => EV[e]).map(e => EV[e]),
+      S.cfg.elements[c.el].beats === vs ? (evs.includes('echo') ? 'echo +60%' : 'element +30%') : '', ex ? 'exhausted ×0.5' : ''].filter(Boolean).join(', ');
+    const nt = note(last.theirs, last.theirExhausted, last.mine.el, last.theirEvents, last.theirs.flipped), nm = note(last.mine, last.myExhausted, last.theirs.el, last.myEvents, last.mine.flipped);
     $('calc').textContent = `${last.theirPower}${nt ? ' (' + nt + ')' : ''} – ${last.myPower}${nm ? ' (' + nm + ')' : ''}${last.myAuto ? ' · auto-played' : ''}`;
     if (fresh) {
       lastRevealRound = last.round; SFX.flip(); showBoard();
@@ -697,6 +717,8 @@ function renderMatch() {
         myExhausted: last.myExhausted, theirExhausted: last.theirExhausted,
       });
       setTimeout(() => last.result !== 'tie' && SFX.round(last.result === 'win'), 1150);
+      if (last.mine.flipped || last.theirs.flipped) setTimeout(() => FX.banner(document.querySelector('#match .board'), 'FLIP TRAP!', '#c79bff',
+        last.mine.flipped && last.theirs.flipped ? 'Both cards flipped' : last.mine.flipped ? 'Your card was flipped' : 'You flipped their card'), 450);
     }
   } else {
     if (m.phase === 'pick' && m.round !== lastBannerRound) {
@@ -726,25 +748,38 @@ function renderMatch() {
       if (up > down) hint = { cls: 'up', txt: `▲${up}`, title: `Beats ${up} of their remaining cards` };
       else if (down > up) hint = { cls: 'down', txt: `▼${down}`, title: `Weak to ${down} of their remaining cards` };
     }
-    const el = cardEl(c, { hint });
+    const face = S.matchSel === c.uid ? S.matchFace : m.you.pick === c.uid ? m.you.face : 0;
+    const el = cardEl(c, { hint, face });
     if (used) { el.classList.add('used'); el.disabled = true; }
     else {
       if (rar(c.rar).cost > m.you.energy) { el.classList.add('dim'); el.title = 'Not enough energy: plays at half power'; }
       if (S.matchSel === c.uid) el.classList.add('sel');
-      el.onclick = () => { if (!canPick) return; S.matchSel = c.uid; SFX.click(); renderMatch(); };
+      el.onclick = () => { if (!canPick) return; if (S.matchSel !== c.uid) { S.matchSel = c.uid; S.matchFace = 0; } SFX.click(); renderMatch(); };
     }
     hand.appendChild(el);
   });
   const pc = canPick && m.you.hand.find(c => c.uid === S.matchSel);
+  // choose the side that faces up
+  const fp = $('facePick');
+  fp.hidden = !pc;
+  if (pc) {
+    const opt = f => { const sd = sideOf(pc, f); return `<button type="button" class="face-opt${S.matchFace === f ? ' on' : ''}" data-face="${f}" aria-pressed="${S.matchFace === f}">
+      <span class="fo-top">${f ? '↻ BACK' : 'FRONT'}</span><span class="fo-name">${esc(sd.name)}</span>
+      <span class="fo-stats"><span class="el e-${sd.el}">${elName(sd.el)}</span> <b class="num">⚔ ${sd.pow}</b></span>
+      <span class="fo-ab">${sd.ab ? `<b>${esc(abName(sd.ab))}</b> ${esc(abText(sd.ab))}` : 'No ability'}</span></button>`; };
+    fp.innerHTML = `<p class="fp-q">Which side faces up?</p><div class="fp-row">${opt(0)}${opt(1)}</div>`;
+  }
   $('lock').disabled = !pc;
+  const ps = pc && sideOf(pc, S.matchFace);
   $('lockNote').textContent = m.phase === 'reveal' ? 'Next round starting…' : !canPick ? 'Waiting for your opponent…' :
-    !pc ? 'Pick a card. ▲ = strong vs their cards, ▼ = weak.' :
-    (rar(pc.rar).cost > m.you.energy ? `${pc.name} will play exhausted (half power).` : `${pc.name} · costs ${rar(pc.rar).cost} energy.`);
+    !pc ? 'Pick a card, then choose its side. ▲ = strong vs their cards, ▼ = weak.' :
+    (rar(pc.rar).cost > m.you.energy ? `${ps.name} will play exhausted (half power).` : `${ps.name} · costs ${rar(pc.rar).cost} energy.`);
 }
+$('facePick').onclick = e => { const b = e.target.closest('[data-face]'); if (!b || !S.match) return; S.matchFace = Number(b.dataset.face); SFX.click(); renderMatch(); };
 $('lock').onclick = async () => {
   const m = S.match; if (!m || S.matchSel === null) return;
   $('lock').disabled = true; SFX.lock(); showBoard();
-  try { await emit('match:pick', { matchId: m.matchId, uid: S.matchSel }); }
+  try { await emit('match:pick', { matchId: m.matchId, uid: S.matchSel, face: S.matchFace || 0 }); }
   catch (e) { toast(e.message); $('lock').disabled = false; }
 };
 
@@ -808,7 +843,7 @@ async function renderCollection() {
     b.onclick = () => { S.filter = k; SFX.click(); renderCollection(); }; f.appendChild(b);
   });
   const g = $('collGrid'); g.innerHTML = '';
-  cs.filter(c => S.filter === 'all' || c.el === S.filter || c.rar === S.filter).forEach(c => g.appendChild(cardEl(c, { static: true, isNew: S.newUids.includes(c.uid) })));
+  cs.filter(c => S.filter === 'all' || c.el === S.filter || c.back.el === S.filter || c.rar === S.filter).forEach(c => g.appendChild(cardEl(c, { static: true, flip: true, isNew: S.newUids.includes(c.uid) })));
   show('collection');
 }
 
@@ -887,7 +922,7 @@ function drawMarket() {
 }
 function listingTile(l) {
   const wrap = document.createElement('div'); wrap.className = 'mk-tile'; wrap.dataset.listing = l.id;
-  wrap.appendChild(cardEl(l.card, { static: true, noListed: true }));
+  wrap.appendChild(cardEl(l.card, { static: true, noListed: true, flip: true }));
   const info = document.createElement('div'); info.className = 'mk-info';
   const avg = MK.avgPrice[l.card.tpl];
   info.innerHTML = `<b class="num">${fmt(l.price)} FLIP</b><span>${l.mine ? 'Your listing' : 'by ' + esc(l.seller)} · ${ago(l.createdAt)}</span>` +
@@ -922,7 +957,7 @@ function sellPanel(c) {
       <div class="row" style="gap:8px"><button class="btn" type="submit" id="mkListBtn">List for sale</button><button class="btn ghost" type="button" id="mkSellCancel">Cancel</button></div>
       <p class="err" id="mkSellErr" role="alert"></p>
     </div>`;
-  d.querySelector('.mk-sell-card').appendChild(cardEl(c, { static: true }));
+  d.querySelector('.mk-sell-card').appendChild(cardEl(c, { static: true, flip: true }));
   const inp = d.querySelector('#mkPrice');
   const upd = () => {
     const p = Math.round(Number(String(inp.value).replace(/[^0-9]/g, '')) || 0);
