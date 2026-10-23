@@ -60,6 +60,7 @@
     <button role="tab" data-tab="forge" aria-selected="false">FORGE</button>
     <button role="tab" data-tab="shop" aria-selected="false">SHOP</button>
     <button role="tab" data-tab="ranks" aria-selected="false">RANKS</button>
+    <button role="tab" data-tab="clans" aria-selected="false">CLANS</button>
     <button role="tab" data-tab="history" aria-selected="false">HISTORY</button>
   </nav>
 
@@ -275,6 +276,18 @@
     <div class="frame podium" id="podium" hidden></div>
     <div class="row between"><h3 class="muted">LEADERBOARD</h3><div class="statline" id="rankStats"></div></div>
     <div class="frame tblwrap" id="rankWrap"></div>
+  </section>
+
+  <!-- CLANS -->
+  <section id="clans" hidden>
+    <div class="clan-head">
+      <div><h2>Clans</h2><p class="note" id="clanIntro">Up to 25 players under one banner. Every ranked win gives your clan a point; the season's top clan flies its banner over the island plaza.</p></div>
+      <button class="btn" type="button" id="clanFound">Found a clan</button>
+    </div>
+    <div id="clanEditor" class="frame clan-editor" hidden></div>
+    <div id="clanView"></div>
+    <div class="clan-search"><label class="note" for="clanSearch">Find a clan</label><input id="clanSearch" autocomplete="off" spellcheck="false" placeholder="Name or tag"></div>
+    <div id="clanList" class="clan-list"></div>
   </section>
 
   <!-- HISTORY -->

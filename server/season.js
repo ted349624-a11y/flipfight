@@ -1,6 +1,6 @@
 // Weekly seasons: keeps exactly one open season, and when it ends pays the top 100,
 // records the results (top 3 = permanent badges), resets ratings halfway to 1200 and opens the next one.
-function createSeasons({ db, G, io }) {
+function createSeasons({ db, G, io, onReset, afterReset }) {
   const S = G.SEASON;
   let current = null;
 
@@ -35,11 +35,13 @@ function createSeasons({ db, G, io }) {
       await db.addStat('season_rewards_paid', paid.reduce((a, p) => a + p.reward, 0), c);
       // soft reset for everyone, and fresh season stats
       await db.query(`UPDATE users SET elo = ROUND($1::numeric + (elo - $1::numeric) * $2::numeric)::int, season_played = 0, season_wins = 0, season_losses = 0, season_draws = 0`, [S.resetTo, S.resetKeep], c);
+      if (onReset) await onReset(c);
       await db.query('UPDATE seasons SET finalized_at = $1 WHERE number = $2', [Date.now(), row.number], c);
       await db.query('INSERT INTO seasons(number, starts_at, ends_at) VALUES($1,$2,$3) ON CONFLICT (number) DO NOTHING',
         [row.number + 1, Number(row.ends_at), Number(row.ends_at) + S.lengthMs], c);
     });
     console.log(`Season ${season.number} finalized: ${paid.length} players paid.`);
+    if (afterReset) afterReset();
     await load();
     io.emit('season:ended', { season: season.number, next: current.number });
   }

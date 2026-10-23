@@ -147,6 +147,23 @@ const ECONOMY = {
   feeSplit: { burn: 0.4, treasury: 0.4, season: 0.2 },
 };
 
+// Clans: anyone can found one for 50,000 FLIP (burned). Up to 25 members; the founder is the leader.
+// A banner (colours + symbol + pattern) is shown next to every member's nickname. Each ranked win by a member
+// gives the clan 1 season point; the season's top clan flies its banner over the island plaza.
+const CLAN = {
+  createCost: 50000,
+  maxMembers: 25,
+  colors: ['#e0484e', '#ff8a3a', '#ffcc33', '#5fd38d', '#4fd3d3', '#4f8dff', '#8a5cf6', '#ff6bd6', '#f3ecd6', '#2a2238'],
+  symbols: ['sword', 'shield', 'crown', 'flame', 'wave', 'leaf', 'skull', 'star', 'moon', 'bolt', 'heart', 'eye'],
+  patterns: ['plain', 'stripe', 'split', 'chevron'],
+  joinModes: ['open', 'approval'],
+};
+function clanBannerOk(b) {
+  return !!b && Number.isInteger(b.bg) && Number.isInteger(b.fg) && Number.isInteger(b.sym) && Number.isInteger(b.pat) &&
+    b.bg >= 0 && b.bg < CLAN.colors.length && b.fg >= 0 && b.fg < CLAN.colors.length && b.bg !== b.fg &&
+    b.sym >= 0 && b.sym < CLAN.symbols.length && b.pat >= 0 && b.pat < CLAN.patterns.length;
+}
+
 const CHAIN_ID = 4663; // Robinhood Chain mainnet (sign-in messages only; nothing is sent on-chain)
 
 const MATCH = { energy: 15, rounds: 5, winsNeeded: 3, turnMs: 20000, revealMs: 2600, deckSize: 5 };
@@ -204,4 +221,4 @@ function clash(a, b) {
   };
 }
 
-module.exports = { FLIP_CALL, BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };
+module.exports = { CLAN, clanBannerOk, FLIP_CALL, BACKS, ABILITIES, ABILITY_NUM, faceOf, clash, SEASON, seasonReward, seasonResetElo, TIERS, tierOf, MARKET, FUSION, fusionChance, PRACTICE, BOT_LEVELS, CHAIN_ID, ELEMENTS, RARITIES, TEMPLATES, ROOMS, PACKS, ECONOMY, MATCH, cardView, effectivePower };

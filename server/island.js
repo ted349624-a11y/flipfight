@@ -15,13 +15,14 @@ const EMOTES = ['hi', 'gg', 'wow', 'lol', 'fire', 'heart'];
 const TICK_MS = 200;
 const CHANNEL_CAP = Number(process.env.ISLAND_CHANNEL_CAP) || 50;
 
-function createIsland({ io, q, isFounderId = () => false }) {
+function createIsland({ io, q, isFounderId = () => false, clanOf = () => null, topClan = () => null }) {
   const players = new Map();  // userId -> { id, nick, addr, elo, x, y, dir, moving, emote, emoteAt, lastMove, socketId, dirty, ch }
   const channels = new Map(); // channel number -> Set of userIds
 
   const room = ch => 'island:' + ch;
   const flags = p => (p.dir & 3) | (p.moving ? 4 : 0);
-  const full = p => [p.id, p.nick, p.addr, p.elo, Math.round(p.x), Math.round(p.y), flags(p), p.emote && Date.now() - p.emoteAt < 3000 ? p.emote : '', isFounderId(p.id) ? 1 : 0];
+  const clanTag = p => { const c = p.clan; return c ? [c.tag, c.banner.bg, c.banner.fg, c.banner.sym, c.banner.pat] : 0; };
+  const full = p => [p.id, p.nick, p.addr, p.elo, Math.round(p.x), Math.round(p.y), flags(p), p.emote && Date.now() - p.emoteAt < 3000 ? p.emote : '', isFounderId(p.id) ? 1 : 0, clanTag(p)];
   const clampX = v => Math.max(0, Math.min(WORLD.w, Number(v) || 0));
   const clampY = v => Math.max(0, Math.min(WORLD.h, Number(v) || 0));
   const list = () => [...channels.entries()].sort((a, b) => a[0] - b[0]).map(([id, set]) => ({ id, players: set.size, cap: CHANNEL_CAP }));
@@ -70,7 +71,7 @@ function createIsland({ io, q, isFounderId = () => false }) {
           removePlayer(prev);
         }
         const ch = pickChannel(data && data.channel);
-        const p = { id: u.id, nick: u.nickname, addr: u.address, elo: u.elo, x: clampX(data && data.x), y: clampY(data && data.y),
+        const p = { id: u.id, nick: u.nickname, addr: u.address, elo: u.elo, clan: clanOf(u.clan_id), x: clampX(data && data.x), y: clampY(data && data.y),
           dir: 0, moving: false, emote: '', emoteAt: 0, lastMove: 0, socketId: socket.id, dirty: false, ch };
         players.set(u.id, p);
         if (!channels.has(ch)) channels.set(ch, new Set());
@@ -78,7 +79,7 @@ function createIsland({ io, q, isFounderId = () => false }) {
         socket.to(room(ch)).emit('island:join', full(p));
         socket.join(room(ch));
         const here = [...channels.get(ch)].map(id => full(players.get(id)));
-        if (typeof fn === 'function') fn({ ok: true, channel: ch, cap: CHANNEL_CAP, players: here });
+        if (typeof fn === 'function') fn({ ok: true, channel: ch, cap: CHANNEL_CAP, players: here, topClan: topClan() });
       } catch (e) { if (typeof fn === 'function') fn({ ok: false, error: 'Could not join the island.' }); }
     });
     socket.on('island:channels', fn => { if (typeof fn === 'function') fn({ ok: true, channels: list(), cap: CHANNEL_CAP }); });

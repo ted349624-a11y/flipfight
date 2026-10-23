@@ -158,11 +158,19 @@ function trophies(badges) {
   return (founder ? '<span class="founder-tag" title="Flipfight founder">★ FOUNDER</span>' : '') + list.filter(b => b.place).slice(0, 3).map(b => `<span class="trophy" style="color:${PLACE_COL[b.place - 1]}" title="#${b.place} in Season ${b.season}">${TROPHY}<em>S${b.season}</em></span>`).join('');
 }
 
+// clan banner next to a nickname
+const bannerURLs = new Map();
+function bannerURL(b) {
+  const k = `${b.bg}.${b.fg}.${b.sym}.${b.pat}`;
+  if (!bannerURLs.has(k)) bannerURLs.set(k, Island.bannerSprite(b).toDataURL());
+  return bannerURLs.get(k);
+}
+const clanFlag = cl => (cl && cl.banner ? `<img class="cflag" src="${bannerURL(cl.banner)}" alt="" title="[${esc(cl.tag)}] ${esc(cl.name || '')}"><span class="ctag">${esc(cl.tag)}</span>` : '');
 function backEl() { const d = document.createElement('div'); d.className = 'back bigback'; return d; }
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
 // ---------- screens ----------
-const SCREENS = ['login', 'nickname', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'history'];
+const SCREENS = ['login', 'nickname', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'clans', 'history'];
 let current = null;
 function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
@@ -188,7 +196,7 @@ function atmosphere(id) {
   else if (id !== 'result') FX.scene('night');
   if (id !== 'match') FX.music('lobby');
   // the island itself is the backdrop of every screen: the camera rests on the building you are in
-  const focus = { arena: 'arena', deck: 'arena', queue: 'arena', match: 'arena', result: 'arena', collection: 'collection', forge: 'forge', market: 'market', shop: 'shop', ranks: 'ranks', history: 'history' }[id] || 'plaza';
+  const focus = { arena: 'arena', deck: 'arena', queue: 'arena', match: 'arena', result: 'arena', collection: 'collection', forge: 'forge', market: 'market', shop: 'shop', ranks: 'ranks', clans: 'clans', history: 'history' }[id] || 'plaza';
   const mood = ['deck', 'queue', 'match', 'result'].includes(id) && roomId != null ? ({ 2: 'volcano', 3: 'temple' }[roomId] || 'calm') : 'calm';
   if (id === 'island') Island.backdropOff(); else Island.backdrop(focus, mood);
   FX.ambient(id === 'forge' ? 'forge' : id === 'market' ? 'market' : null);
@@ -208,7 +216,7 @@ function setTab(tab) {
   if (S.match) return;
   S.tab = tab;
   [...$('tabs').children].forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ({ island: renderIsland, arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, history: renderHistory })[tab]();
+  ({ island: renderIsland, arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, clans: renderClans, history: renderHistory })[tab]();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { SFX.click(); setTab(b.dataset.tab); } };
 function lockTabs(on) { [...$('tabs').children].forEach(b => { b.disabled = on; b.style.opacity = on ? .45 : 1; }); }
@@ -220,7 +228,7 @@ function updateTop() {
   $('nick').textContent = (p.founder ? '★ ' : '') + (p.nickname || ''); $('addr').textContent = shortAddr(p.address);
   $('sfx').setAttribute('aria-pressed', S.sfx); $('sfx').textContent = S.sfx ? 'SFX ON' : 'SFX OFF';
   $('musicBtn').setAttribute('aria-pressed', FX.musicOn()); $('musicBtn').textContent = FX.musicOn() ? 'MUSIC ON' : 'MUSIC OFF';
-  $('hudNick').textContent = (p.founder ? '★ ' : '') + (p.nickname || ''); $('hudBal').textContent = fmt(p.balance);
+  $('hudNick').innerHTML = clanFlag(p.clan) + esc((p.founder ? '★ ' : '') + (p.nickname || '')); $('hudBal').textContent = fmt(p.balance);
   if (S.cfg) $('hudTier').innerHTML = `${tierBadge(p.elo)} <span class="num">${p.elo}</span>`;
   $('hudMusic').setAttribute('aria-pressed', FX.musicOn());
   const sb = document.querySelector('#islandQuick [data-act=sfx]'); if (sb) sb.textContent = S.sfx ? 'SOUND FX: ON' : 'SOUND FX: OFF';
@@ -379,6 +387,7 @@ $('nickForm').onsubmit = async e => {
 // ---------- boot ----------
 async function boot() {
   if (!S.cfg) S.cfg = await api('/api/config');
+  if (S.cfg.clan) Island.setClanColors(S.cfg.clan.colors);
   renderGuide();
   if (!S.token) return renderLogin();
   let me;
@@ -452,7 +461,7 @@ function emit(ev, data) {
 }
 
 // ---------- island (home) ----------
-const BUILDING_TAB = { arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', history: 'history' };
+const BUILDING_TAB = { arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', clans: 'clans', history: 'history' };
 let hintTimer = 0;
 function renderIsland() {
   show('island');
@@ -686,10 +695,10 @@ function showBoard() {
 function renderMatch() {
   const m = S.match;
   const oppLeft = m.opp.leftElements;
-  $('oppSide').innerHTML = `<b>${esc(m.opp.nickname)} ${trophies(m.opp.badges)}</b><span class="meta num">${m.room.practice ? '' : tierBadge(m.opp.elo, true) + ' '}ELO ${m.opp.elo} · ⚡ ${m.opp.energy}</span>
+  $('oppSide').innerHTML = `<b>${clanFlag(m.opp.clan)}${esc(m.opp.nickname)} ${trophies(m.opp.badges)}</b><span class="meta num">${m.room.practice ? '' : tierBadge(m.opp.elo, true) + ' '}ELO ${m.opp.elo} · ⚡ ${m.opp.energy}</span>
     <div class="left" title="Their remaining cards: front and back element">${(m.opp.leftSides || oppLeft.map(e => [e, e])).map(([f, b]) => `<i class="pair"><b class="e-${f}"></b><b class="e-${b}"></b></i>`).join('')}</div>${m.opp.bonus ? `<span class="rally-note">RALLY +${m.opp.bonus}</span>` : ''}
     <span class="locked-note">${m.phase === 'pick' && m.opp.locked ? 'LOCKED IN' : ''}</span>`;
-  $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>${m.you.bonus ? `<span class="rally-note">RALLY +${m.you.bonus} on your next card</span>` : ''}`;
+  $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${clanFlag(m.you.clan)}${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>${m.you.bonus ? `<span class="rally-note">RALLY +${m.you.bonus} on your next card</span>` : ''}`;
   $('score').textContent = `${m.opp.wins} : ${m.you.wins}`;
   $('rnd').textContent = `ROUND ${m.round}/5`;
   $('pot').textContent = m.room.practice ? `PRACTICE · NO STAKES${m.mult > 1 ? ' · ×' + m.mult : ''}` : `Pot ${fmt(m.entry * 2)} FLIP${m.mult > 1 ? ' · ×' + m.mult : ''}`;
@@ -1213,7 +1222,7 @@ async function renderRanks() {
   const need = Math.max(0, SN.minMatches - (me.played || 0));
   const nt = nextTier(me.elo);
   $('myRank').innerHTML = `<div class="mr-place"><span class="num">${me.rank ? '#' + me.rank : '–'}</span><small>${me.rank ? 'OF ' + fmt(data.ranked) : 'NOT RANKED YET'}</small></div>
-    <div class="mr-info"><b>${esc(me.nickname)} ${trophies(S.badges)}</b>
+    <div class="mr-info"><b>${clanFlag(S.me.clan)}${esc(me.nickname)} ${trophies(S.badges)}</b>
       <span>${tierBadge(me.elo)} <span class="num">${me.elo} ELO</span>${nt ? ` · <span class="muted">${nt.min - me.elo} to ${nt.name}</span>` : ''}</span>
       <span class="muted num">This season: ${me.wins || 0}W ${me.losses || 0}L ${me.draws || 0}D</span></div>
     <div class="mr-reward">${need ? `<b>PLAY ${need} MORE</b><small>RANKED MATCH${need > 1 ? 'ES' : ''} TO QUALIFY</small>`
@@ -1231,10 +1240,148 @@ async function renderRanks() {
   if (!data.players.length) { $('rankWrap').innerHTML = '<p class="emptystate">Nobody has played a ranked match this season yet. Be the first!</p>'; return; }
   $('rankWrap').innerHTML = `<table class="lb"><thead><tr><th>#</th><th>Player</th><th class="r">ELO</th><th class="r">W-L-D</th><th class="r">Reward</th></tr></thead><tbody>` +
     data.players.map(p => `<tr class="${p.id === S.me.id ? 'me' : ''}${p.place && p.place <= 3 ? ' top' + p.place : ''}"><td class="num">${p.rank}</td>
-      <td>${tierBadge(p.elo, true)} ${esc(p.nickname)}${p.id === S.me.id ? ' (you)' : ''} ${trophies(p.badges)}</td><td class="r num">${p.elo}</td>
+      <td>${tierBadge(p.elo, true)} ${clanFlag(p.clan)}${esc(p.nickname)}${p.id === S.me.id ? ' (you)' : ''} ${trophies(p.badges)}</td><td class="r num">${p.elo}</td>
       <td class="r num">${p.wins}-${p.losses}-${p.draws}</td><td class="r num">${p.qualified ? (p.reward ? fmt(p.reward) : '–') : `<span class="muted" title="Needs ${SN.minMatches - p.played} more ranked match(es)">${p.played}/${SN.minMatches}</span>`}</td></tr>`).join('') +
     '</tbody></table>';
 }
+
+// ---------- clans ----------
+const CL = { list: [], open: null, editor: null, confirm: null, q: '' };
+const clanApi = (path, body) => api('/api/clan/' + path, body);
+async function renderClans() {
+  show('clans');
+  const cost = S.cfg.clan.createCost;
+  $('clanFound').textContent = `Found a clan · ${fmt(cost)} FLIP`;
+  $('clanFound').hidden = !!S.me.clan;
+  $('clanList').innerHTML = '<p class="emptystate">Loading clans…</p>';
+  try {
+    await refreshMe();
+    const r = await api('/api/clans' + (CL.q ? '?q=' + encodeURIComponent(CL.q) : ''));
+    CL.list = r.clans;
+    if (S.me.clan && !CL.open) CL.open = S.me.clan.id;
+    drawClanList();
+    if (CL.open) await openClan(CL.open); else $('clanView').innerHTML = '';
+  } catch (e) { $('clanList').innerHTML = `<p class="emptystate">${esc(e.message)}</p>`; }
+  $('clanFound').hidden = !!S.me.clan;
+}
+function drawClanList() {
+  const mine = S.me.clan && S.me.clan.id;
+  if (!CL.list.length) { $('clanList').innerHTML = `<p class="emptystate">${CL.q ? 'No clan matches that search.' : 'No clans yet. Found the first one!'}</p>`; return; }
+  $('clanList').innerHTML = CL.list.map(c => {
+    let act = '';
+    if (c.id === mine) act = '<span class="ctag">YOUR CLAN</span>';
+    else if (!mine) act = c.members >= S.cfg.clan.maxMembers ? '<span class="ctag">FULL</span>'
+      : c.requested ? `<button class="btn ghost" type="button" data-cancel="${c.id}">Requested · cancel</button>`
+      : `<button class="btn" type="button" data-join="${c.id}">${c.joinMode === 'open' ? 'Join' : 'Ask to join'}</button>`;
+    return `<div class="clan-row${c.id === mine ? ' mine' : ''}" tabindex="0" role="button" data-open="${c.id}" aria-label="${esc(c.name)} clan">
+      <span class="rk num">#${c.rank}</span><img class="bn" src="${bannerURL(c.banner)}" alt="">
+      <span class="nm"><b><span class="ctag">${esc(c.tag)}</span>${esc(c.name)}</b><span class="num">${c.members}/${S.cfg.clan.maxMembers} members · ${c.points} pts this season · ${c.joinMode === 'open' ? 'open' : 'by approval'}</span></span>
+      <span class="act">${act}</span></div>`;
+  }).join('');
+}
+$('clanList').onclick = async e => {
+  const j = e.target.closest('[data-join]'), c = e.target.closest('[data-cancel]'), o = e.target.closest('[data-open]');
+  try {
+    if (j) { SFX.click(); const r = await clanApi('join', { clanId: Number(j.dataset.join) }); toast(r.joined ? 'Welcome to the clan!' : 'Request sent. The leader will decide.'); if (r.joined) { SFX.coin(); CL.open = Number(j.dataset.join); } return renderClans(); }
+    if (c) { SFX.click(); await clanApi('cancel-request', { clanId: Number(c.dataset.cancel) }); return renderClans(); }
+    if (o) { SFX.click(); CL.open = Number(o.dataset.open); await openClan(CL.open); $('clanView').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' }); }
+  } catch (err) { toast(err.message); }
+};
+$('clanList').onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-open]')) { e.preventDefault(); e.target.click(); } };
+let clanSearchT = null;
+$('clanSearch').oninput = () => { clearTimeout(clanSearchT); clanSearchT = setTimeout(() => { CL.q = $('clanSearch').value.trim(); renderClans(); }, 300); };
+
+async function openClan(id) {
+  let d;
+  try { d = await api('/api/clan/' + id); } catch (e) { CL.open = null; $('clanView').innerHTML = ''; return; }
+  const cl = d.clan, max = cl.max, rank = (CL.list.find(x => x.id === cl.id) || {}).rank;
+  const confirmBtn = (key, label, sure, cls = '') => `<button class="btn ${cls}" type="button" data-act="${key}">${CL.confirm === key ? sure : label}</button>`;
+  const actions = [];
+  if (d.isLeader) actions.push('<button class="btn ghost" type="button" data-act="edit">Edit banner & settings</button>', confirmBtn('disband', 'Disband clan', 'Click again to disband', 'ghost'));
+  else if (d.isMember) actions.push(confirmBtn('leave', 'Leave clan', 'Click again to leave', 'ghost'));
+  else if (!S.me.clan) actions.push(d.requested ? `<button class="btn ghost" type="button" data-act="cancel">Requested · cancel</button>`
+    : cl.members >= max ? '<span class="ctag">THIS CLAN IS FULL</span>' : `<button class="btn" type="button" data-act="join">${cl.joinMode === 'open' ? 'Join clan' : 'Ask to join'}</button>`);
+  if (!d.isMember) actions.push('<button class="btn ghost" type="button" data-act="close">Close</button>');
+  const memberRow = m => `<tr><td>${tierBadge(m.elo, true)} ${esc(m.nickname)}${m.leader ? '<span class="lead">♛ LEADER</span>' : ''}${m.id === S.me.id ? ' (you)' : ''}</td>
+    <td class="r num">${m.elo}</td><td class="r num">${m.seasonWins}</td>
+    <td class="r">${d.isLeader && !m.leader ? `<button type="button" data-lead="${m.id}">${CL.confirm === 'lead' + m.id ? 'SURE?' : 'MAKE LEADER'}</button><button type="button" class="danger" data-kick="${m.id}">${CL.confirm === 'kick' + m.id ? 'SURE?' : 'KICK'}</button>` : ''}</td></tr>`;
+  $('clanView').innerHTML = `<div class="frame clan-panel">
+      <img class="big" src="${bannerURL(cl.banner)}" alt="${esc(cl.name)} banner">
+      <div><h3><span class="ctag">${esc(cl.tag)}</span>${esc(cl.name)}<em>${cl.joinMode === 'open' ? 'OPEN' : 'BY APPROVAL'}</em></h3>
+        <div class="clan-stats"><span><b class="num">${cl.members}/${max}</b> members</span><span><b class="num">${cl.points}</b> season points</span>${rank ? `<span>rank <b class="num">#${rank}</b></span>` : ''}</div>
+        <div class="clan-actions">${actions.join('')}</div></div>
+      ${d.requests.length ? `<div class="clan-members"><h3>JOIN REQUESTS</h3><table><tbody>${d.requests.map(r => `<tr><td>${tierBadge(r.elo, true)} ${esc(r.nickname)}</td><td class="r num">${r.elo}</td>
+        <td class="r"><button type="button" data-approve="${r.id}">APPROVE</button><button type="button" class="danger" data-reject="${r.id}">REJECT</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+      <div class="clan-members"><h3>MEMBERS</h3><table><thead><tr><th>Player</th><th class="r">ELO</th><th class="r">Season wins</th><th></th></tr></thead>
+        <tbody>${d.members.map(memberRow).join('')}</tbody></table></div>
+    </div>`;
+  CL.detail = d;
+}
+$('clanView').onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const d = CL.detail; if (!d) return;
+  const id = d.clan.id, act = b.dataset.act;
+  const twoStep = key => { if (CL.confirm === key) { CL.confirm = null; return true; } CL.confirm = key; openClan(id); setTimeout(() => { if (CL.confirm === key) { CL.confirm = null; openClan(id); } }, 4000); return false; };
+  SFX.click();
+  try {
+    if (act === 'edit') return openClanEditor(d.clan);
+    if (act === 'close') { CL.open = null; $('clanView').innerHTML = ''; return; }
+    if (act === 'join') { const r = await clanApi('join', { clanId: id }); toast(r.joined ? 'Welcome to the clan!' : 'Request sent. The leader will decide.'); return renderClans(); }
+    if (act === 'cancel') { await clanApi('cancel-request', { clanId: id }); return renderClans(); }
+    if (act === 'leave') { if (!twoStep('leave')) return; await clanApi('leave', {}); toast('You left the clan.'); CL.open = null; return renderClans(); }
+    if (act === 'disband') { if (!twoStep('disband')) return; await clanApi('disband', {}); toast('The clan was disbanded.'); CL.open = null; return renderClans(); }
+    if (b.dataset.kick) { if (!twoStep('kick' + b.dataset.kick)) return; await clanApi('kick', { userId: Number(b.dataset.kick) }); return renderClans(); }
+    if (b.dataset.lead) { if (!twoStep('lead' + b.dataset.lead)) return; await clanApi('transfer', { userId: Number(b.dataset.lead) }); toast('Leadership handed over.'); return renderClans(); }
+    if (b.dataset.approve) { await clanApi('approve', { userId: Number(b.dataset.approve) }); return renderClans(); }
+    if (b.dataset.reject) { await clanApi('reject', { userId: Number(b.dataset.reject) }); return openClan(id); }
+  } catch (err) { toast(err.message); }
+};
+
+// banner editor: used to found a clan and (for the leader) to edit it
+function openClanEditor(existing) {
+  const pick = (n, not) => { let v; do { v = Math.floor(Math.random() * n); } while (v === not); return v; };
+  const bg = pick(S.cfg.clan.colors.length - 1);
+  CL.editor = existing ? { edit: true, name: existing.name, tag: existing.tag, banner: { ...existing.banner }, joinMode: existing.joinMode }
+    : { edit: false, name: '', tag: '', banner: { bg, fg: pick(S.cfg.clan.colors.length, bg), sym: pick(S.cfg.clan.symbols.length), pat: 0 }, joinMode: 'open' };
+  drawClanEditor();
+  $('clanEditor').hidden = false; $('clanEditor').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+}
+function drawClanEditor() {
+  const E = CL.editor, b = E.banner, cols = S.cfg.clan.colors;
+  const sw = (key, i) => { const off = (key === 'fg' && i === b.bg) || (key === 'bg' && i === b.fg);
+    return `<button type="button" class="sw" style="background:${cols[i]}${off ? ';opacity:.25' : ''}" data-${key}="${i}" aria-pressed="${b[key] === i}" aria-label="Colour ${i + 1}"${off ? ' disabled' : ''}></button>`; };
+  $('clanEditor').innerHTML = `
+    ${E.edit ? '' : `<div class="fld"><label class="note" for="ceName">Clan name (3–20)</label><input type="text" id="ceName" maxlength="20" value="${esc(E.name)}" placeholder="Pixel Kings"></div>
+    <div class="fld"><label class="note" for="ceTag">Tag (2–4 letters or numbers)</label><input type="text" id="ceTag" maxlength="4" value="${esc(E.tag)}" placeholder="PK" style="text-transform:uppercase;width:120px"></div>`}
+    <div class="fld"><span class="note">Banner colour</span><div class="swatches">${cols.map((_, i) => sw('bg', i)).join('')}</div></div>
+    <div class="fld"><span class="note">Symbol colour</span><div class="swatches">${cols.map((_, i) => sw('fg', i)).join('')}</div></div>
+    <div class="fld"><span class="note">Symbol</span><div class="syms">${S.cfg.clan.symbols.map((n, i) => `<button type="button" class="sym" data-sym="${i}" aria-pressed="${b.sym === i}" title="${n}"><img src="${bannerURL({ ...b, sym: i })}" alt="${n}"></button>`).join('')}</div></div>
+    <div class="fld"><span class="note">Pattern</span><div class="pats">${S.cfg.clan.patterns.map((n, i) => `<button type="button" class="pat" data-pat="${i}" aria-pressed="${b.pat === i}" title="${n}"><img src="${bannerURL({ ...b, pat: i })}" alt="${n}"></button>`).join('')}</div></div>
+    <div class="fld"><span class="note">Who can join</span><div class="modes"><button type="button" data-mode="open" aria-pressed="${E.joinMode === 'open'}">OPEN · ANYONE</button><button type="button" data-mode="approval" aria-pressed="${E.joinMode === 'approval'}">BY APPROVAL</button></div></div>
+    <div class="preview"><img src="${bannerURL(b)}" alt="Banner preview"><b><span class="ctag">${esc(E.tag.toUpperCase() || 'TAG')}</span>${esc(E.name || 'Your clan')}</b><span class="note">${clanFlag({ tag: E.tag.toUpperCase() || 'TAG', name: E.name, banner: b })}${esc(S.me.nickname)}</span></div>
+    <div class="foot"><button class="btn" type="button" id="ceSave">${E.edit ? 'Save changes' : `Found clan · ${fmt(S.cfg.clan.createCost)} FLIP`}</button><button class="btn ghost" type="button" id="ceCancel">Cancel</button><p class="err" id="ceErr" role="alert"></p></div>`;
+}
+$('clanEditor').oninput = e => {
+  if (e.target.id === 'ceName') CL.editor.name = e.target.value;
+  if (e.target.id === 'ceTag') CL.editor.tag = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const pv = $('clanEditor').querySelector('.preview b'); if (pv) pv.innerHTML = `<span class="ctag">${esc(CL.editor.tag || 'TAG')}</span>${esc(CL.editor.name || 'Your clan')}`;
+};
+$('clanEditor').onclick = async e => {
+  const t = e.target.closest('button'); if (!t || t.disabled) return;
+  const E = CL.editor; SFX.click();
+  for (const k of ['bg', 'fg', 'sym', 'pat']) if (t.dataset[k] !== undefined) { E.banner[k] = Number(t.dataset[k]); return drawClanEditor(); }
+  if (t.dataset.mode) { E.joinMode = t.dataset.mode; return drawClanEditor(); }
+  if (t.id === 'ceCancel') { $('clanEditor').hidden = true; CL.editor = null; return; }
+  if (t.id === 'ceSave') {
+    t.disabled = true; $('ceErr').textContent = '';
+    try {
+      if (E.edit) { await clanApi('update', { banner: E.banner, joinMode: E.joinMode }); toast('Clan updated.'); }
+      else { const r = await clanApi('create', { name: E.name, tag: E.tag, banner: E.banner, joinMode: E.joinMode }); CL.open = r.clanId; SFX.legend(); toast(`[${E.tag}] ${E.name} is founded!`); }
+      $('clanEditor').hidden = true; CL.editor = null; renderClans();
+    } catch (err) { $('ceErr').textContent = err.message; t.disabled = false; }
+  }
+};
+$('clanFound').onclick = () => { SFX.click(); if (S.me.balance < S.cfg.clan.createCost) return toast(`Founding a clan costs ${fmt(S.cfg.clan.createCost)} FLIP.`); openClanEditor(null); };
 
 // ---------- history ----------
 async function renderHistory() {

@@ -115,6 +115,14 @@ Her kartın bir ön ve bir arka yüzü var. Maçta kartı seçince hangi yüzün
 
 2. turdan itibaren, kartını kilitlemeden önce maç başına bir kez "FLIP! ×2" basabilirsin. Rakibin 12 saniyede ya kabul eder (ikiniz de bir giriş daha yatırırsınız, pot ikiye katlanır) ya da çekilir (maçı mevcut bahisten hemen kaybeder). İki oyuncu da birer kez çağırabildiği için pot en fazla ×4 olur. Cevap gelmezse ve parası yetiyorsa kabul sayılır. Antrenmanda bot da FLIP! çağırır ve cevaplar. Test: `node scripts/flip-call-test.js <url> <previewKey>`.
 
+## Klanlar
+
+- Klan kurmak 50.000 FLIP (yakılır), en fazla 25 üye, kurucu liderdir.
+- Lider: sancak (renk, sembol, desen) ve katılım modunu (açık / onaylı) düzenler, istekleri onaylar/reddeder, üye atar, liderliği devreder, klanı dağıtır. Lider, başka üye varken liderliği devretmeden ayrılamaz.
+- Sancak her üyenin nickinin yanında görünür: adada isim plakasında, maç ekranında, sıralamada ve üst barda.
+- Üyelerin her ranked galibiyeti klana 1 sezon puanı verir; sezonun lider klanının sancağı ada meydanındaki direkte dalgalanır. Sezon bitince puanlar sıfırlanır.
+- Adada yeni bina: CLANS. Test: `node scripts/clan-test.js <url> <previewKey>`.
+
 ## Kurucu (founder) hesabı
 
 Render → Environment kısmına ekle:

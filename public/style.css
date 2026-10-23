@@ -590,3 +590,54 @@ body:not(.on-island) .wrap::before{content:"";position:fixed;top:0;bottom:0;left
 .flip-ask p b{color:var(--gold);font-weight:400}
 .fa-timer{font-family:var(--font-px);font-size:8px;color:var(--muted)}
 #pot.doubled{color:#c79bff}
+
+/* clans */
+.cflag{width:12px;height:14px;image-rendering:pixelated;vertical-align:-2px;margin-right:4px}
+.ctag{font-family:var(--font-px);font-size:7px;color:var(--muted);margin-right:4px;vertical-align:1px}
+.clan-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.clan-head h2{color:#5fd38d}
+.clan-search{display:flex;flex-direction:column;gap:6px}
+.clan-search input,.clan-editor input[type=text]{font:inherit;font-size:20px;color:var(--fg);background:var(--bg2);border:0;padding:10px 12px;box-shadow:inset 0 0 0 3px var(--line);width:min(420px,100%)}
+.clan-search input:focus,.clan-editor input:focus{outline:none;box-shadow:inset 0 0 0 3px #5fd38d}
+.clan-list{display:flex;flex-direction:column;gap:8px}
+.clan-row{display:grid;grid-template-columns:34px 44px 1fr auto;gap:12px;align-items:center;padding:10px 14px;background:var(--panel);box-shadow:inset 0 0 0 3px var(--line);cursor:pointer}
+.clan-row:hover,.clan-row:focus-visible{box-shadow:inset 0 0 0 3px #5fd38d;outline:none}
+.clan-row.mine{box-shadow:inset 0 0 0 3px var(--gold)}
+.clan-row .rk{font-family:var(--font-px);font-size:10px;color:var(--muted)}
+.clan-row .bn{width:36px;height:42px;image-rendering:pixelated}
+.clan-row .nm{display:flex;flex-direction:column;gap:4px;min-width:0}
+.clan-row .nm b{font-weight:400;font-size:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clan-row .nm span{font-size:17px;color:var(--muted)}
+.clan-row .act .btn{font-size:9px;padding:9px 10px}
+.clan-panel{display:grid;grid-template-columns:auto 1fr;gap:18px 22px;padding:18px;--b:#5fd38d}
+.clan-panel .big{width:96px;height:112px;image-rendering:pixelated}
+.clan-panel h3{font-size:16px;margin:0 0 6px}
+.clan-panel h3 em{font-style:normal;color:var(--muted);font-size:11px;margin-left:6px}
+.clan-stats{display:flex;gap:18px;flex-wrap:wrap;font-size:18px;color:var(--muted)}
+.clan-stats b{color:var(--fg);font-weight:400}
+.clan-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.clan-actions .btn{font-size:9px;padding:10px 12px}
+.clan-members{grid-column:1/-1}
+.clan-members table{width:100%;border-collapse:collapse;font-size:19px}
+.clan-members th{font-family:var(--font-px);font-size:7px;color:var(--muted);text-align:left;padding:6px 8px;font-weight:400}
+.clan-members td{padding:7px 8px;border-top:2px solid var(--line)}
+.clan-members .r{text-align:right}
+.clan-members .lead{color:var(--gold);font-family:var(--font-px);font-size:7px;margin-left:6px}
+.clan-members button{all:unset;cursor:pointer;font-family:var(--font-px);font-size:7px;padding:5px 6px;margin-left:4px;box-shadow:inset 0 0 0 2px var(--line)}
+.clan-members button:hover,.clan-members button:focus-visible{box-shadow:inset 0 0 0 2px var(--gold);color:var(--gold)}
+.clan-members button.danger:hover{box-shadow:inset 0 0 0 2px var(--bad);color:var(--bad)}
+.clan-editor{display:grid;grid-template-columns:1fr auto;gap:14px 24px;padding:18px;--b:#5fd38d}
+.clan-editor .fld{display:flex;flex-direction:column;gap:6px}
+.clan-editor .swatches,.clan-editor .syms,.clan-editor .pats,.clan-editor .modes{display:flex;flex-wrap:wrap;gap:6px}
+.clan-editor .sw{all:unset;cursor:pointer;width:26px;height:26px;box-shadow:inset 0 0 0 2px #0b0916}
+.clan-editor .sw[aria-pressed=true]{box-shadow:inset 0 0 0 2px #0b0916,0 0 0 3px var(--gold)}
+.clan-editor .sym,.clan-editor .pat{all:unset;cursor:pointer;padding:3px;box-shadow:inset 0 0 0 2px var(--line)}
+.clan-editor .sym[aria-pressed=true],.clan-editor .pat[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--gold)}
+.clan-editor .sym img,.clan-editor .pat img{width:24px;height:28px;image-rendering:pixelated;display:block}
+.clan-editor .modes button{all:unset;cursor:pointer;font-family:var(--font-px);font-size:8px;padding:9px 10px;box-shadow:inset 0 0 0 2px var(--line)}
+.clan-editor .modes button[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--gold);color:var(--gold)}
+.clan-editor .preview{grid-row:1/span 6;grid-column:2;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.clan-editor .preview img{width:120px;height:140px;image-rendering:pixelated}
+.clan-editor .preview b{font-weight:400;font-size:20px}
+.clan-editor .foot{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media (max-width:640px){.clan-editor{grid-template-columns:1fr}.clan-editor .preview{grid-row:auto;grid-column:1}.clan-panel{grid-template-columns:1fr}.clan-panel .big{width:72px;height:84px}}

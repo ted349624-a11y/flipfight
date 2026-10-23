@@ -3,7 +3,7 @@ const { createBot } = require('./bot');
 
 // Matchmaking queues and the server-authoritative match engine.
 // Live match state is kept in memory; balances, ELO and results are written to the database.
-function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf }) {
+function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf, clanOf = () => null, onWinTx }) {
   const sockets = new Map();   // userId -> socket
   const queues = new Map(G.ROOMS.map(r => [r.id, []])); // roomId -> [{userId, cards, at}]
   const userQueue = new Map(); // userId -> roomId
@@ -78,7 +78,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       if (!deckRow) throw new Error('Build a practice deck first.');
       const { cards } = await validateDeck(userId, G.PRACTICE.id, JSON.parse(deckRow.card_uids));
       const u = await q.userById(userId);
-      const human = { userId: u.id, nickname: u.nickname, elo: u.elo, hand: cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
+      const human = { userId: u.id, nickname: u.nickname, clan: clanOf(u.clan_id), elo: u.elo, hand: cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
       const botP = { userId: BOT_ID, isBot: true, nickname: `Training Bot · ${G.BOT_LEVELS[level].name}`, elo: G.BOT_LEVELS[level].elo,
         hand: bot.buildDeck(cards), used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
       const m = { id: crypto.randomUUID(), room: G.PRACTICE, practice: true, level, players: [human, botP], round: 1, phase: 'pick', deadline: 0, timer: null, botTimer: null, log: [], mult: 1, flip: null };
@@ -133,7 +133,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
   async function startMatch(id, room, a, b) {
     const mk = async e => {
       const u = await q.userById(e.userId);
-      return { userId: u.id, nickname: u.nickname, elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
+      return { userId: u.id, nickname: u.nickname, clan: clanOf(u.clan_id), elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
     };
     const m = { id, room, players: [await mk(a), await mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [], mult: 1, flip: null };
     matches.set(m.id, m);
@@ -216,9 +216,9 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       mult: m.mult, entry: entryOf(m), canCall: canCall(m, idx), lastFlip: m.lastFlip ? { mine: m.lastFlip.by === idx, mult: m.lastFlip.mult, at: m.lastFlip.at } : null,
       flipCall: m.flip ? { mine: m.flip.by === idx, extra: m.flip.extra, deadline: m.flip.deadline } : null,
       folded: m.folded ? { me: m.folded.by === idx } : null,
-      you: { calledFlip: !!me.calledFlip, nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick, face: me.face, bonus: me.bonus },
+      you: { calledFlip: !!me.calledFlip, clan: me.clan || null, nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick, face: me.face, bonus: me.bonus },
       opp: {
-        calledFlip: !!op.calledFlip, nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null, bonus: op.bonus,
+        calledFlip: !!op.calledFlip, clan: op.clan || null, nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null, bonus: op.bonus,
         leftElements: op.hand.filter(c => !op.used.includes(c.uid)).map(c => c.el),
         leftSides: op.hand.filter(c => !op.used.includes(c.uid)).map(c => [c.el, c.back.el]),
       },
@@ -325,6 +325,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf 
       }
       const upd = (s, d, uid) => db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(s)} = ${col(s)} + 1,
                                             season_played = season_played + 1, season_${col(s)} = season_${col(s)} + 1 WHERE id = $2`, [d, uid], c);
+      if (winnerIdx !== null && onWinTx) await onWinTx(m.players[winnerIdx].userId, c); // clan season point
       await upd(s1, d1, p1.userId);
       await upd(1 - s1, d2, p2.userId);
       await db.query(`INSERT INTO matches(id, room_id, p1, p2, winner_id, p1_wins, p2_wins, stake, rake, p1_elo_delta, p2_elo_delta, created_at)

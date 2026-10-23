@@ -44,6 +44,7 @@ const BUILDINGS = [
   { id: 'forge', label: 'FORGE', x: 10, y: 23, w: 6, h: 4, sign: '#ff8a5b' },
   { id: 'collection', label: 'CARDS', x: 29, y: 26, w: 6, h: 4, sign: '#c79bff' },
   { id: 'history', label: 'HISTORY', x: 18, y: 18, w: 3, h: 2, sign: '#c9c3e6', board: true },
+  { id: 'clans', label: 'CLANS', x: 17, y: 26, w: 7, h: 4, sign: '#5fd38d' },
 ];
 BUILDINGS.forEach(b => { b.door = { x: (b.x + Math.floor(b.w / 2)) * T + T / 2, y: (b.y + b.h) * T + 6 }; });
 const PLAZA_C = { x: 26, y: 18 };
@@ -73,6 +74,7 @@ const map = [], solid = [], props = [], lights = [];
   for (let y = py + 1; y < Math.min(MH, py + 4); y++) solid[y][PLAZA_C.x] = false;
   BUILDINGS.forEach(b => { for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) solid[y][x] = true; });
   for (let y = PLAZA_C.y - 1; y <= PLAZA_C.y; y++) for (let x = PLAZA_C.x - 1; x <= PLAZA_C.x; x++) solid[y][x] = true; // fountain
+  solid[PLAZA_C.y - 2][PLAZA_C.x - 4] = true; // top-clan flagpole
   // lamp posts along the paths
   const free = (x, y) => y > 0 && y < MH - 1 && x > 0 && x < MW - 1 && map[y][x] === GRASS && !solid[y][x];
   let n = 0;
@@ -365,6 +367,21 @@ BLD.history = (c, W, H) => {
 };
 
 // building lights (windows, torches, furnace) in world coordinates
+BLD.clans = (c, W, H) => {
+  // timber longhouse with the banners of the island's clans hanging on the facade
+  wall(c, 2, 16, W - 4, H - 16, '#8b84a0', '#a99fbd', '#6d6684'); bricks(c, 2, 20, W - 4, H - 24, '#7a7392');
+  roofRows(c, -3, 0, W + 6, 18, '#5b3a26', '#3f281a', '#2a1a10');
+  px(c, '#3f281a', W / 2 - 1, -18, 2, 18); for (let i = 0; i < 6; i++) px(c, '#5fd38d', W / 2 + 1, -18 + i, 8 - i, 1); // roof flag
+  const cols = [['#e0484e', '#ffcc33'], ['#4f8dff', '#f3ecd6'], ['#8a5cf6', '#ffcc33'], ['#5fd38d', '#2a2238']];
+  cols.forEach(([bg, fg], i) => {
+    const x = 10 + i * 26; if (x + 12 > W - 6 || Math.abs(x + 6 - W / 2) < 16) return;
+    px(c, '#3f281a', x - 1, 20, 14, 2); px(c, bg, x, 22, 12, 18); px(c, bg, x, 40, 4, 3); px(c, bg, x + 8, 40, 4, 3);
+    px(c, fg, x + 4, 27, 4, 6); px(c, fg, x + 5, 25, 2, 10);
+  });
+  px(c, OUT, W / 2 - 13, H - 27, 26, 27); px(c, '#6e4826', W / 2 - 12, H - 26, 24, 26); px(c, '#5b3a26', W / 2 - 1, H - 26, 2, 26);
+  for (let j = 0; j < 4; j++) px(c, '#4a3020', W / 2 - 12, H - 22 + j * 6, 24, 1);
+  px(c, '#ffcc33', W / 2 - 4, H - 14, 2, 2); px(c, '#ffcc33', W / 2 + 2, H - 14, 2, 2);
+};
 function buildingLights() {
   const at = (b, x, y, r, c, f = 0) => lights.push({ x: b.x * T + x, y: (b.y + b.h) * T - b.h * T + y, r, c, flicker: f });
   const B = id => BUILDINGS.find(b => b.id === id);
@@ -375,6 +392,7 @@ function buildingLights() {
   const fg = B('forge'); at(fg, 24, 46, 64, [255, 120, 50], .22); at(fg, fg.w * T - 15, -22, 34, [255, 140, 60], .2);
   const co = B('collection'); at(co, 20, 32, 38, [255, 210, 140]); at(co, co.w * T - 20, 32, 38, [255, 210, 140]); at(co, co.w * T / 2, 8, 26, [255, 210, 140]);
   const hi = B('history'); at(hi, hi.w * T / 2, 10, 30, [200, 200, 255]);
+  const cl = B('clans'); at(cl, 20, 30, 34, [255, 190, 120], .08); at(cl, cl.w * T - 20, 30, 34, [255, 190, 120], .08); at(cl, cl.w * T / 2, 40, 40, [255, 200, 140]);
   lights.push({ x: PLAZA_C.x * T, y: PLAZA_C.y * T - 4, r: 56, c: [120, 180, 255], flicker: .04 }); // fountain
 }
 
@@ -551,6 +569,53 @@ function drawChar(c, p) {
   c.drawImage(sh, frame * 16, p.dir * 22, 16, 22, Math.round(p.x) - 8, Math.round(p.y) - 21, 16, 22);
 }
 
+// ---------- clan banners ----------
+// Palette and symbols must match CLAN in shared/game.js (the app passes the palette in with setClanColors).
+let CLAN_COLORS = ['#e0484e', '#ff8a3a', '#ffcc33', '#5fd38d', '#4fd3d3', '#4f8dff', '#8a5cf6', '#ff6bd6', '#f3ecd6', '#2a2238'];
+const CLAN_SYMBOLS = {
+  sword: ['..#..', '..#..', '..#..', '.###.', '..#..'], shield: ['#####', '#####', '#####', '.###.', '..#..'],
+  crown: ['#.#.#', '#####', '#####', '#####', '.....'], flame: ['..#..', '.##..', '.###.', '#####', '.###.'],
+  wave: ['..#..', '.###.', '#####', '#####', '.###.'], leaf: ['...##', '..###', '.###.', '###..', '#....'],
+  skull: ['.###.', '#####', '#.#.#', '#####', '.#.#.'], star: ['..#..', '#####', '.###.', '.#.#.', '#...#'],
+  moon: ['.###.', '##...', '##...', '##...', '.###.'], bolt: ['..##.', '.##..', '####.', '..##.', '.##..'],
+  heart: ['##.##', '#####', '#####', '.###.', '..#..'], eye: ['.....', '.###.', '##.##', '.###.', '.....'],
+};
+const SYMBOL_IDS = Object.keys(CLAN_SYMBOLS);
+const bannerCache = new Map();
+// 12x14 pixel flag on a pole. b = { bg, fg, sym, pat } (palette / symbol / pattern indexes)
+function bannerSprite(b) {
+  const key = `${b.bg}.${b.fg}.${b.sym}.${b.pat}`;
+  if (bannerCache.has(key)) return bannerCache.get(key);
+  const cv = canvas(12, 14), c = cv.getContext('2d');
+  const bg = CLAN_COLORS[b.bg] || '#888', fg = CLAN_COLORS[b.fg] || '#fff', dk = shade(bg, .7);
+  px(c, '#3f281a', 0, 1, 2, 13); px(c, '#ffcc33', 0, 0, 2, 1);                       // pole and knob
+  px(c, OUT, 2, 0, 10, 13);                                                             // cloth outline
+  for (let y = 1; y < 12; y++) for (let x = 3; x < 11; x++) {
+    if (y >= 10 && Math.abs(x - 6.5) < (y - 9) * 1.2) continue;                          // swallowtail notch
+    let col = bg;
+    if (b.pat === 1 && (y === 3 || y === 8)) col = dk;                                   // stripes
+    if (b.pat === 2 && x >= 7) col = dk;                                                 // split
+    if (b.pat === 3 && Math.abs(x - 6.5) + 1 > y - 5 && Math.abs(x - 6.5) + 1 <= y - 3) col = dk; // chevron
+    px(c, col, x, y, 1, 1);
+  }
+  for (let y = 10; y < 13; y++) for (let x = 3; x < 11; x++) if (Math.abs(x - 6.5) < (y - 9) * 1.2 && Math.abs(x - 6.5) >= (y - 9) * 1.2 - 1) px(c, OUT, x, y, 1, 1);
+  const sym = CLAN_SYMBOLS[SYMBOL_IDS[b.sym]] || CLAN_SYMBOLS.star;
+  sym.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#') px(c, fg, 4 + x, 3 + y, 1, 1); }));
+  bannerCache.set(key, cv);
+  return cv;
+}
+const clanFrom = row => (Array.isArray(row) ? { tag: row[0], banner: { bg: row[1], fg: row[2], sym: row[3], pat: row[4] } } : null);
+// the season's top clan flies its banner on a tall pole at the plaza
+const FLAGPOLE = { x: (PLAZA_C.x - 4) * T + 6, y: (PLAZA_C.y - 2) * T + 12 };
+function drawFlagpole(c, t, top) {
+  const { x, y } = FLAGPOLE;
+  px(c, 'rgba(10,8,30,.4)', x - 4, y - 1, 12, 3);
+  px(c, OUT, x - 1, y - 58, 4, 59); px(c, '#cfc6b0', x, y - 57, 2, 57); px(c, '#ffcc33', x - 1, y - 61, 4, 3);
+  const img = bannerSprite(top ? top.banner : { bg: 6, fg: 2, sym: 7, pat: 0 }); // no leader yet: the Flipfight star
+  // a waving flag: draw the cloth column by column with a little sine offset
+  for (let col = 2; col < 12; col++) c.drawImage(img, col, 0, 1, 14, x + 2 + (col - 2) * 2, y - 56 + Math.round(Math.sin(t * 3 + col * .6) * 1.5 * (col / 12)) * 2, 2, 28);
+}
+
 // ---------- state ----------
 const I = {
   mounted: false, canvas: null, ctx: null, light: null, lctx: null, scale: 2, vw: 0, vh: 0, cam: { x: 0, y: 0 },
@@ -655,8 +720,9 @@ function renderWorld(now, V) {
   // depth-sorted scene: props, buildings, players
   const items = sortables.filter(s => s.x < cx + vw + 40 && s.x + s.img.width > cx - 40 && s.y < cy + vh + 40 && s.y + s.img.height > cy - 60);
   chars.forEach(p => items.push({ char: p, base: p.y }));
+  items.push({ flag: true, base: FLAGPOLE.y });
   items.sort((a, b) => a.base - b.base);
-  for (const it of items) { if (it.char) drawChar(c, it.char); else c.drawImage(it.img, it.x, it.y); }
+  for (const it of items) { if (it.char) drawChar(c, it.char); else if (it.flag) drawFlagpole(c, t, V.topClan); else c.drawImage(it.img, it.x, it.y); }
   // fountain water spray and forge smoke
   if (!reduced) {
     const fx = PLAZA_C.x * T - 1, fy = (PLAZA_C.y - 1) * T + 3;
@@ -717,7 +783,7 @@ function render(now) {
     o.anim = o.moving || d > 2 ? o.anim + .12 : 0; chars.push(o);
   });
   chars.push(me);
-  renderWorld(now, { c, L: I.lctx, light: I.light, vw, vh, cx, cy, chars, flies: I.flies, glowAt: me });
+  renderWorld(now, { c, L: I.lctx, light: I.light, vw, vh, cx, cy, chars, flies: I.flies, glowAt: me, topClan: I.topClan });
   // signs, names and bubbles stay readable on top of the darkness
   c.save(); c.translate(-cx, -cy);
   c.font = '8px "Press Start 2P", monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
@@ -732,6 +798,7 @@ function render(now) {
   for (const p of chars) {
     const name = p.nick, nw = Math.round(c.measureText(name).width);
     const nx = Math.round(p.x), ny = Math.round(p.y) - 26;
+    if (p.clan) c.drawImage(bannerSprite(p.clan.banner), nx - Math.round(nw / 2) - (p.founder ? 26 : 18), ny - 12); // clan flag next to the name
     if (p.founder) { // royal name plate with stars
       const w = nw + 22;
       px(c, OUT, nx - w / 2 - 1, ny - 11, w + 2, 15); px(c, '#7a1428', nx - w / 2, ny - 10, w, 13); px(c, '#ffcc33', nx - w / 2, ny + 2, w, 1); px(c, '#ffcc33', nx - w / 2, ny - 10, w, 1);
@@ -800,7 +867,7 @@ function bdLoop(now) {
   BD.cam.x += (want.x - BD.cam.x) * .06; BD.cam.y += (want.y - BD.cam.y) * .06;
   if (!reduced) BD.npcs.forEach(n => npcTick(n, dt));
   const c = BD.ctx, cx = Math.round(BD.cam.x), cy = Math.round(BD.cam.y), vw = BD.vw, vh = BD.vh;
-  renderWorld(now, { c, L: BD.lctx, light: BD.light, vw, vh, cx, cy, chars: BD.npcs, flies: BD.flies, night: m.night });
+  renderWorld(now, { c, L: BD.lctx, light: BD.light, vw, vh, cx, cy, chars: BD.npcs, flies: BD.flies, night: m.night, topClan: I.topClan });
   c.save(); c.translate(-cx, -cy);
   c.font = '8px "Press Start 2P", monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
   const b = BUILDINGS.find(x => x.id === BD.focus); if (b) drawSign(c, b);
@@ -881,15 +948,15 @@ function enterChannel(ch) {
   if (!I.socket || !I.me) return;
   I.socket.emit('island:enter', { x: Math.round(I.me.x), y: Math.round(I.me.y), channel: ch || undefined }, r => {
     if (!r || !r.ok || !I.mounted) return;
-    I.channel = r.channel; I.cap = r.cap;
+    I.channel = r.channel; I.cap = r.cap; I.topClan = r.topClan || null;
     applyFull(r.players, I.me.id);
   });
 }
 // The server sends full profiles once (enter ack, 'island:join') and then only compact position deltas.
-function addOther(id, nick, addr, elo, x, y, fl, emote, founder) {
+function addOther(id, nick, addr, elo, x, y, fl, emote, founder, clan) {
   let o = I.others.get(id);
   if (!o) { o = { id, x, y, tx: x, ty: y, anim: 0 }; I.others.set(id, o); }
-  Object.assign(o, { nick, elo, founder: !!founder, look: lookOf(addr, !!founder), tx: x, ty: y, dir: fl & 3, moving: !!(fl & 4) });
+  Object.assign(o, { nick, elo, founder: !!founder, clan: clanFrom(clan), look: lookOf(addr, !!founder), tx: x, ty: y, dir: fl & 3, moving: !!(fl & 4) });
   if (emote) { o.emote = emote; o.emoteUntil = performance.now() + 3000; }
 }
 const countChanged = () => I.onCount && I.onCount(I.others.size + 1, I.channel, I.cap);
@@ -923,7 +990,7 @@ window.Island = {
     container.appendChild(I.canvas);
     let start = SPAWN;
     try { const s = JSON.parse(localStorage.getItem('ff-island-pos') || 'null'); if (s && walkable(s.x, s.y)) start = s; } catch (e) {}
-    I.me = { id: me.id, nick: me.nickname, founder: !!me.founder, x: start.x, y: start.y, dir: 0, moving: false, anim: 0, look: lookOf(me.address, !!me.founder) };
+    I.me = { id: me.id, nick: me.nickname, founder: !!me.founder, clan: me.clan || null, x: start.x, y: start.y, dir: 0, moving: false, anim: 0, look: lookOf(me.address, !!me.founder) };
     I.path = []; I.pending = null; I.inside = null; I.keys = {};
     I.cooldownDoor = (BUILDINGS.find(b => Math.abs(start.x - b.door.x) < 10 && Math.abs(start.y - b.door.y) < 9) || {}).id || null;
     resize();
@@ -951,6 +1018,9 @@ window.Island = {
   goTo(id) { const b = BUILDINGS.find(x => x.id === id); if (b && I.mounted) { I.pending = b.id; I.cooldownDoor = null; I.path = findPath(I.me.x, I.me.y, b.door.x, b.door.y + 2); } },
   resize,
   zoom(n) { I.zoom = n || 0; resize(); },
+  setClanColors(cols) { if (Array.isArray(cols) && cols.length) { CLAN_COLORS = cols; bannerCache.clear(); } },
+  setTopClan(cl) { I.topClan = cl || null; },
+  bannerSprite, symbols: SYMBOL_IDS,
   channels(cb) { if (I.socket) I.socket.emit('island:channels', r => cb(r && r.ok ? r : null)); else cb(null); },
   switchChannel(n) { if (I.mounted && n !== I.channel) { I.others.clear(); enterChannel(n); } },
   state: () => ({ channel: I.channel, me: I.me && { x: Math.round(I.me.x), y: Math.round(I.me.y), dir: I.me.dir }, others: [...I.others.values()].map(o => ({ nick: o.nick, x: Math.round(o.tx), y: Math.round(o.ty), emote: o.emoteUntil > performance.now() ? o.emote : '' })), path: I.path.length, scale: I.scale, view: [I.vw, I.vh] }),

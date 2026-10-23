@@ -10,6 +10,8 @@ const G = require('../shared/game');
 const { createMatchmaker } = require('./match');
 const { createSeasons } = require('./season');
 const { createIsland } = require('./island');
+const { createClans } = require('./clans');
+const clans = createClans({ db, G });
 
 const PORT = Number(process.env.PORT) || 3000;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -135,7 +137,7 @@ async function createUser(address) {
 
 function publicProfile(u) {
   return {
-    id: u.id, address: u.address, nickname: u.nickname, founder: isFounder(u), balance: u.balance, elo: u.elo, tier: G.tierOf(u.elo).id,
+    id: u.id, address: u.address, nickname: u.nickname, founder: isFounder(u), clan: clans.clanOf(u.clan_id), balance: u.balance, elo: u.elo, tier: G.tierOf(u.elo).id,
     wins: u.wins, losses: u.losses, draws: u.draws, freePacks: u.free_packs,
     season: { played: u.season_played || 0, wins: u.season_wins || 0, losses: u.season_losses || 0, draws: u.season_draws || 0 },
     bonusReadyIn: Math.max(0, u.last_bonus + G.ECONOMY.dailyBonusMs - now()),
@@ -254,7 +256,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
   res.json({ season: G.SEASON, tiers: G.TIERS, rewards: Array.from({ length: G.SEASON.paidPlaces }, (_, i) => G.seasonReward(i + 1)), market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit },
-    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM });
+    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM, clan: G.CLAN });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {
@@ -479,13 +481,14 @@ app.get('/api/leaderboard', route(async (req, res) => {
   const token = (req.headers.authorization || '').replace(/^Bearer /, '');
   const viewer = token ? await sessionUser(token) : null;
   const season = seasons.current() || await seasons.load();
-  const rows = await db.all(`SELECT id, nickname, elo, season_played AS played, season_wins AS wins, season_losses AS losses, season_draws AS draws
+  const rows = await db.all(`SELECT id, nickname, elo, clan_id, season_played AS played, season_wins AS wins, season_losses AS losses, season_draws AS draws
                              FROM users WHERE nickname IS NOT NULL AND season_played > 0 ORDER BY elo DESC, season_wins DESC, id ASC`);
   let q2 = 0;
   const ranked = rows.map((u, i) => {
     const qualified = u.played >= G.SEASON.minMatches;
     const place = qualified ? ++q2 : null;
-    return { rank: i + 1, ...u, tier: G.tierOf(u.elo).id, qualified, place, reward: place ? G.seasonReward(place) : 0 };
+    const { clan_id, ...rest } = u;
+    return { rank: i + 1, ...rest, clan: clans.clanOf(clan_id), tier: G.tierOf(u.elo).id, qualified, place, reward: place ? G.seasonReward(place) : 0 };
   });
   const top = ranked.slice(0, 100);
   const meRow = viewer && ranked.find(r => r.id === viewer.id);
@@ -498,7 +501,7 @@ app.get('/api/leaderboard', route(async (req, res) => {
   const total = await db.one('SELECT COUNT(*)::int AS n FROM users WHERE nickname IS NOT NULL');
   res.json({
     season: { number: season.number, startsAt: Number(season.starts_at), endsAt: Number(season.ends_at), serverNow: Date.now() },
-    players: top, me: meRow || (viewer ? { id: viewer.id, nickname: viewer.nickname, elo: viewer.elo, tier: G.tierOf(viewer.elo).id, played: viewer.season_played, rank: null } : null),
+    players: top, topClan: clans.topClan(), me: meRow || (viewer ? { id: viewer.id, nickname: viewer.nickname, clan: clans.clanOf(viewer.clan_id), elo: viewer.elo, tier: G.tierOf(viewer.elo).id, played: viewer.season_played, rank: null } : null),
     ranked: ranked.length, totalPlayers: total.n, lastSeason: last && { number: last.number, podium },
     burned: await db.getStat('burned'), online: matchmaker.onlineCount(),
   });
@@ -539,9 +542,10 @@ io.use((socket, next) => {
   }).catch(() => next(new Error('unavailable')));
 });
 
-const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf });
-const seasons = createSeasons({ db, G, io });
-const island = createIsland({ io, q, G, isFounderId: id => founderIds.has(id) });
+const matchmaker = createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf, clanOf: clans.clanOf, onWinTx: clans.onWin });
+const seasons = createSeasons({ db, G, io, onReset: clans.seasonReset, afterReset: clans.afterSeasonReset });
+const island = createIsland({ io, q, G, isFounderId: id => founderIds.has(id), clanOf: clans.clanOf, topClan: clans.topClan });
+clans.register(app, { auth, route, fail });
 // Live feeds are only sent to players looking at the screen that shows them.
 const WATCH = { lobby: 'w:lobby', market: 'w:market' };
 io.on('connection', socket => {
@@ -560,6 +564,7 @@ setInterval(() => {
 }, 60 * 60 * 1000).unref();
 
 db.init()
+  .then(() => clans.load())
   .then(async () => { if (FOUNDERS.size) for (const r of await db.all('SELECT id FROM users WHERE address = ANY($1::text[])', [[...FOUNDERS]])) founderIds.add(r.id); })
   .then(() => seasons.start())
   .then(() => server.listen(PORT, () => console.log(`Flipfight running on http://localhost:${PORT}`)))
