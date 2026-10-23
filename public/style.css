@@ -351,6 +351,7 @@ body{background:transparent}
 .pc-slots{display:flex;gap:6px}
 .pc-slots i{width:18px;height:26px;background:#0e0c1a;box-shadow:0 0 0 2px var(--line) inset}
 .pc-slots i.on{box-shadow:0 0 0 2px #0b0916 inset}
+.pc-slots i.e-fire{background:var(--fire)} .pc-slots i.e-wind{background:var(--wind)} .pc-slots i.e-earth{background:var(--earth)} .pc-slots i.e-water{background:var(--water)}
 .pc-text{display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px}
 .pc-text b{font-family:var(--font-px);font-size:12px;font-weight:400;color:var(--gold);line-height:1.5}
 .pickcall.done .pc-text b{color:var(--good)}
@@ -673,3 +674,15 @@ nav.tabs button.tab-boss{color:#ff5d6c}
 .boss-hit{font-family:var(--font-px);font-size:18px;color:#ff5d6c;text-shadow:3px 3px 0 #0b0916}
 .trophy.boss-badge{color:#ff5d6c}
 @media (max-width:700px){.boss-hero{grid-template-columns:1fr;justify-items:center;text-align:center}.boss-info{width:100%}#bossArt{width:168px;height:156px}.boss-cols{grid-template-columns:1fr}}
+
+/* ante room */
+.room.ante-room{--b:#ff6bd6}
+.room.ante-room .stake{color:#ff6bd6}
+.ante-pick{padding:14px 16px;display:flex;flex-direction:column;gap:10px;--b:#ff6bd6}
+.ante-pick b{font-family:var(--font-px);font-size:10px;color:#ff6bd6;font-weight:400}
+.ante-pick .ante-row{display:flex;flex-wrap:wrap;gap:8px}
+.ante-pick button{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);box-shadow:inset 0 0 0 2px var(--line);font-size:18px}
+.ante-pick button[aria-pressed=true]{box-shadow:inset 0 0 0 3px #ff6bd6;color:#ff6bd6}
+.ante-pick button:focus-visible{outline:3px dashed var(--wind);outline-offset:3px}
+.ante-pick button i{width:10px;height:10px;display:inline-block}
+.ante-pick .note{margin:0}

@@ -36,7 +36,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
   }
 
   // ---------- queue ----------
-  async function joinQueue(userId, roomId) {
+  async function joinQueue(userId, roomId, anteUid) {
     if (busy.has(userId)) throw new Error('Please wait a moment.');
     if (userMatch.has(userId)) throw new Error('You are already in a match.');
     if (userQueue.has(userId)) throw new Error('You are already searching for a match.');
@@ -45,8 +45,10 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
       const deckRow = await q.deckOf(userId, roomId);
       if (!deckRow) throw new Error('Build a deck for this room first.');
       const { room, cards } = await validateDeck(userId, roomId, JSON.parse(deckRow.card_uids));
+      const ante = room.ante ? cards.find(c => c.uid === anteUid) : null;
+      if (room.ante && !ante) throw new Error('Choose one card from your deck to put on the line.');
       if (!(await q.spendBalance(userId, room.stake))) throw new Error('Not enough FLIP for this room.');
-      queues.get(roomId).push({ userId, cards, at: Date.now() });
+      queues.get(roomId).push({ userId, cards, ante, at: Date.now() });
       userQueue.set(userId, roomId);
       broadcastLobby();
       tryPair(roomId);
@@ -149,12 +151,14 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
   }
 
   function tryPair(roomId) {
-    const list = queues.get(roomId);
-    while (list.length >= 2) {
-      const a = list.shift();
-      const bi = list.findIndex(e => e.userId !== a.userId);
-      if (bi < 0) { list.unshift(a); return; }
-      const [b] = list.splice(bi, 1);
+    const list = queues.get(roomId), room = G.ROOMS.find(r => r.id === roomId);
+    for (;;) {
+      // oldest compatible pair first; in the ante room both ante cards must be the same rarity
+      let pair = null;
+      for (let i = 0; i < list.length && !pair; i++) for (let j = i + 1; j < list.length; j++)
+        if (list[j].userId !== list[i].userId && (!room.ante || list[j].ante.rar === list[i].ante.rar)) { pair = [i, j]; break; }
+      if (!pair) return;
+      const b = list.splice(pair[1], 1)[0], a = list.splice(pair[0], 1)[0];
       // reserve both players before any await so nobody can be paired twice
       const id = crypto.randomUUID();
       userQueue.delete(a.userId); userQueue.delete(b.userId);
@@ -171,7 +175,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
   async function startMatch(id, room, a, b) {
     const mk = async e => {
       const u = await q.userById(e.userId);
-      return { userId: u.id, nickname: u.nickname, clan: clanOf(u.clan_id), elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
+      return { ante: e.ante || null, userId: u.id, nickname: u.nickname, clan: clanOf(u.clan_id), elo: u.elo, badges: badgesOf ? (await badgesOf([u.id]))[u.id] || [] : [], hand: e.cards, used: [], energy: G.MATCH.energy, wins: 0, pick: null, face: 0, bonus: 0, auto: false };
     };
     const m = { id, room, players: [await mk(a), await mk(b)], round: 1, phase: 'pick', deadline: 0, timer: null, log: [], mult: 1, flip: null };
     matches.set(m.id, m);
@@ -198,7 +202,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
   const entryOf = m => m.room.stake * m.mult; // what each player has in the pot right now
   function canCall(m, idx) {
     const p = m.players[idx];
-    return !m.boss && m.phase === 'pick' && !m.flip && m.calling === undefined && m.round >= G.FLIP_CALL.fromRound && !p.calledFlip && p.pick === null && m.mult * 2 <= G.FLIP_CALL.maxMult;
+    return !m.boss && !m.room.ante && m.phase === 'pick' && !m.flip && m.calling === undefined && m.round >= G.FLIP_CALL.fromRound && !p.calledFlip && p.pick === null && m.mult * 2 <= G.FLIP_CALL.maxMult;
   }
   async function callFlip(userId, matchId) {
     const m = matches.get(matchId || userMatch.get(userId));
@@ -254,6 +258,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
       mult: m.mult, entry: entryOf(m), canCall: canCall(m, idx), lastFlip: m.lastFlip ? { mine: m.lastFlip.by === idx, mult: m.lastFlip.mult, at: m.lastFlip.at } : null,
       flipCall: m.flip ? { mine: m.flip.by === idx, extra: m.flip.extra, deadline: m.flip.deadline } : null,
       folded: m.folded ? { me: m.folded.by === idx } : null,
+      ante: m.room.ante ? { mine: me.ante, theirs: op.ante } : null,
       you: { calledFlip: !!me.calledFlip, clan: me.clan || null, nickname: me.nickname, elo: me.elo, badges: me.badges || [], hand: me.hand, used: me.used, energy: me.energy, wins: me.wins, pick: me.pick, face: me.face, bonus: me.bonus },
       opp: {
         calledFlip: !!op.calledFlip, clan: op.clan || null, nickname: op.nickname, elo: op.elo, badges: op.badges || [], energy: op.energy, wins: op.wins, locked: op.pick !== null, bonus: op.bonus,
@@ -365,6 +370,11 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
       const upd = (s, d, uid) => db.query(`UPDATE users SET elo = GREATEST(100, elo + $1), ${col(s)} = ${col(s)} + 1,
                                             season_played = season_played + 1, season_${col(s)} = season_${col(s)} + 1 WHERE id = $2`, [d, uid], c);
       if (winnerIdx !== null && onWinTx) await onWinTx(m.players[winnerIdx].userId, c); // clan season point
+      if (m.room.ante && winnerIdx !== null) { // the winner takes the loser's ante card
+        const w = m.players[winnerIdx], l = m.players[1 - winnerIdx];
+        const moved = await db.query('UPDATE cards SET owner_id = $1, owners = owners + 1 WHERE uid = $2 AND owner_id = $3', [w.userId, l.ante.uid, l.userId], c);
+        m.anteMoved = moved.rowCount === 1;
+      }
       // living cards: every card played gets a round played, and a round won if it took the round
       const tally = new Map();
       for (const r of m.log) r.cards.forEach((card, i) => {
@@ -385,7 +395,8 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
       const u = await q.userById(p.userId);
       userMatch.delete(p.userId);
       emitTo(p.userId, 'match:end', {
-        matchId: m.id, out, myWins: p.wins, oppWins: op.wins, opponent: op.nickname, room: m.room.name, mult: m.mult, folded: m.folded ? (m.folded.by === i ? 'me' : 'them') : null,
+        matchId: m.id, out, myWins: p.wins, oppWins: op.wins, opponent: op.nickname, room: m.room.name, mult: m.mult,
+        ante: m.room.ante ? { mine: p.ante, theirs: op.ante, moved: !!m.anteMoved } : null, folded: m.folded ? (m.folded.by === i ? 'me' : 'them') : null,
         stake, pot, rake, net: out === 'win' ? pot - rake - stake : out === 'loss' ? -stake : 0,
         split: { burn: rake * G.ECONOMY.feeSplit.burn, treasury: rake * G.ECONOMY.feeSplit.treasury, season: rake * G.ECONOMY.feeSplit.season },
         eloDelta: i === 0 ? d1 : d2, profile: publicProfile(u),
@@ -407,7 +418,7 @@ function createMatchmaker({ io, db, q, G, validateDeck, publicProfile, badgesOf,
       .catch(e => { if (typeof fn === 'function') fn({ ok: false, error: e.message || 'Request failed.' }); });
 
     socket.on('queue:join', (data, fn) => handle(fn, async () => {
-      const room = await joinQueue(userId, Number(data && data.roomId));
+      const room = await joinQueue(userId, Number(data && data.roomId), Number(data && data.ante));
       return { room: room.id, profile: publicProfile(await q.userById(userId)), matched: userMatch.has(userId) };
     }));
     socket.on('queue:leave', (data, fn) => handle(fn, async () => {

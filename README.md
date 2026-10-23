@@ -131,6 +131,10 @@ Her kart kendi geçmişini tutar: ranked maçlarda oynadığı ve kazandığı t
 
 Her sezon (hafta) iskelenin yanında denizden bir boss yükselir (Leviathan, Infernal Wyrm, Stone Colossus, Tempest Roc sırayla). Can barı tüm ada için ortaktır. Herkesin günde 3 ücretsiz dövüş hakkı var (UTC); hasar = 10 × kartlarının toplam gücü + kazanılan tur başına 2.500 + maçı kazanırsan 10.000. Boss hafta bitmeden düşerse vuran herkes 25.000 FLIP, en çok hasar veren ilk 3 ayrıca 100.000 / 50.000 / 25.000 FLIP ve kalıcı ☠ rozeti alır. Boss canı `BOSS_HP` ortam değişkeniyle ayarlanır (varsayılan 250.000). Adada iskelenin ucuna yürü ya da BOSS sekmesini aç. Test: `node scripts/boss-test.js <url> <previewKey>`.
 
+## Ante odası (Oda 4)
+
+FLIP girişi yok. 5 kartını seçtikten sonra birini masaya koyarsın; sadece aynı nadirlikte kart koyan biriyle eşleşirsin. Kazanan, kaybedenin kartını alır (kartın sahip sayısı artar), beraberlikte ikisi de kartını korur. Ranked sayılır (ELO ve klan puanı). FLIP! çağrısı bu odada kapalı. Kuyruktayken veya maçtayken kartlar Market'e konamaz ve Forge'da kullanılamaz. Test: `node scripts/ante-test.js <url> <previewKey>`.
+
 ## Kurucu (founder) hesabı
 
 Render → Environment kısmına ekle:

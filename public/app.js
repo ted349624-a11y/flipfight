@@ -540,6 +540,14 @@ function renderRooms() {
   const box = $('rooms'); box.innerHTML = '';
   box.appendChild(practiceCard());
   S.cfg.rooms.forEach(rm => {
+    if (rm.ante) {
+      const b = document.createElement('button'); b.className = 'room ante-room'; b.type = 'button';
+      b.innerHTML = `<span class="tier">${rm.name}</span><span class="cap">Stake</span><span class="stake">ONE CARD</span>
+        <span class="win">Win their card</span><span class="cap">Paired by card rarity · ranked</span>
+        <span class="waiting">${(S.lobby.waiting[rm.id] || 0) ? S.lobby.waiting[rm.id] + ' waiting now' : 'Nobody waiting'}</span><span class="go">PLAY ›</span>`;
+      b.onclick = () => { SFX.click(); openDeck(rm); };
+      box.appendChild(b); return;
+    }
     const ok = S.me.balance >= rm.stake;
     const b = document.createElement('button'); b.className = 'room' + (ok ? '' : ' locked'); b.type = 'button';
     const net = rm.stake * 2 * (1 - rm.rake) - rm.stake;
@@ -571,9 +579,9 @@ const byUid = uid => S.cards.find(c => c.uid === uid);
 const sortedCards = () => S.cards.slice().sort((a, b) => rar(b.rar).rank - rar(a.rar).rank || b.pow - a.pow);
 function openDeck(rm) {
   S.room = rm;
-  S.sel = []; // the player always chooses their own 5 cards
+  S.sel = []; S.anteUid = null; // the player always chooses their own 5 cards
   $('deckTitle').textContent = rm.name;
-  $('deckSub').textContent = rm.id === 0 ? `Free practice vs ${S.cfg.botLevels[S.botLevel].name} bot · pick 5 cards` : rm.id === 9 ? 'Free fight · no deck cap · pick your 5 hardest hitters' : `Entry ${fmt(rm.stake)} FLIP · pick 5 cards`;
+  $('deckSub').textContent = rm.id === 0 ? `Free practice vs ${S.cfg.botLevels[S.botLevel].name} bot · pick 5 cards` : rm.id === 9 ? 'Free fight · no deck cap · pick your 5 hardest hitters' : rm.ante ? 'No FLIP entry · pick 5 cards, then put one of them on the line' : `Entry ${fmt(rm.stake)} FLIP · pick 5 cards`;
   renderDeck(); show('deck');
 }
 function renderDeck() {
@@ -604,13 +612,21 @@ function renderDeck() {
   $('clearDeck').hidden = S.sel.length === 0;
   $('deckHint').hidden = S.sel.length === 0;
   $('deckHint').textContent = en > 15 ? `Energy cost is ${en - 15} over 15, so at least one card will play exhausted (half power).` : 'Energy fits: every card can play at full power.';
-  const enough = S.me.balance >= rm.stake, ready = S.sel.length === 5 && !over && enough;
+  // ante room: choose which of the 5 cards goes on the line
+  if (S.anteUid && !S.sel.includes(S.anteUid)) S.anteUid = null;
+  $('antePick').hidden = !rm.ante;
+  if (rm.ante) {
+    $('antePick').innerHTML = `<b>YOUR ANTE CARD</b><p class="note">${S.sel.length < 5 ? 'Pick your 5 cards first, then choose one to put on the line.' : 'You only meet players who ante a card of the same rarity. Win and you take their card; lose and they take yours.'}</p>
+      <div class="ante-row">${cs.map(c => `<button type="button" data-ante="${c.uid}" aria-pressed="${S.anteUid === c.uid}"><i class="e-${c.el}"></i>${esc(c.name)} <span class="ctag" style="color:${RAR_COLORS[c.rar]}">${rar(c.rar).name}</span></button>`).join('')}</div>`;
+  }
+  const enough = S.me.balance >= rm.stake, ready = S.sel.length === 5 && !over && enough && (!rm.ante || !!S.anteUid);
   $('enter').disabled = !ready;
-  $('enter').textContent = rm.id === 0 ? `Start practice · ${S.cfg.botLevels[S.botLevel].name} bot` : rm.id === 9 ? 'Fight the boss' : `Find opponent · lock ${fmt(rm.stake)} FLIP`;
+  $('enter').textContent = rm.id === 0 ? `Start practice · ${S.cfg.botLevels[S.botLevel].name} bot` : rm.id === 9 ? 'Fight the boss' : rm.ante ? (S.anteUid ? `Find opponent · ante ${byUid(S.anteUid).name}` : 'Choose your ante card') : `Find opponent · lock ${fmt(rm.stake)} FLIP`;
   $('enterNote').textContent = !enough ? 'Not enough FLIP.' : over ? 'Deck power is over the room cap. Swap a strong card for a weaker one.' : S.sel.length < 5 ? `Choose ${5 - S.sel.length} more card${5 - S.sel.length > 1 ? 's' : ''} to start.` : '';
   $('enterNote').className = 'note' + ((over || !enough) ? ' warn' : '');
 }
 $('backLobby').onclick = () => { SFX.click(); setTab(S.room && S.room.id === 9 ? 'boss' : 'arena'); };
+$('antePick').onclick = e => { const b = e.target.closest('[data-ante]'); if (!b) return; S.anteUid = Number(b.dataset.ante); SFX.click(); renderDeck(); };
 $('clearDeck').onclick = () => { S.sel = []; SFX.click(); renderDeck(); };
 $('enter').onclick = async () => {
   const btn = $('enter'); btn.disabled = true;
@@ -621,7 +637,7 @@ $('enter').onclick = async () => {
     SFX.lock();
     if (S.room.id === 0) { await emit('practice:start', { level: S.botLevel }); return; }
     if (S.room.id === 9) { await emit('boss:start', {}); return; }
-    const res = await emit('queue:join', { roomId: S.room.id });
+    const res = await emit('queue:join', { roomId: S.room.id, ante: S.room.ante ? S.anteUid : undefined });
     S.me = res.profile; updateTop();
     if (!S.match) startQueueScreen();
   } catch (e) { toast(e.message); btn.disabled = false; }
@@ -649,7 +665,9 @@ function startQueueScreen() {
 function renderQueueNote() {
   if (!S.room) return;
   const secs = Math.floor((Date.now() - queueStart) / 1000);
-  $('queueNote').textContent = `${S.room.name} · ${fmt(S.room.stake)} FLIP locked in escrow · ${S.lobby.online || 1} online · waiting ${secs}s`;
+  const an = S.room.ante && S.anteUid && byUid(S.anteUid);
+  $('queueNote').textContent = an ? `${S.room.name} · ante ${an.name} (${rar(an.rar).name.toLowerCase()}) · looking for a ${rar(an.rar).name.toLowerCase()} ante · waiting ${secs}s`
+    : `${S.room.name} · ${fmt(S.room.stake)} FLIP locked in escrow · ${S.lobby.online || 1} online · waiting ${secs}s`;
 }
 $('cancelQueue').onclick = async () => {
   try { const r = await emit('queue:leave', {}); S.me = r.profile; } catch (e) { toast(e.message); }
@@ -709,7 +727,7 @@ function renderMatch() {
   $('mySide').innerHTML = `<b>${trophies(m.you.badges)} ${clanFlag(m.you.clan)}${esc(m.you.nickname)}</b><span class="meta num">${tierBadge(m.you.elo, true)} ELO ${m.you.elo} · ⚡ ${m.you.energy}</span>${m.you.bonus ? `<span class="rally-note">RALLY +${m.you.bonus} on your next card</span>` : ''}`;
   $('score').textContent = `${m.opp.wins} : ${m.you.wins}`;
   $('rnd').textContent = `ROUND ${m.round}/5`;
-  $('pot').textContent = m.room.boss ? `WORLD BOSS · deal damage` : m.room.practice ? `PRACTICE · NO STAKES${m.mult > 1 ? ' · ×' + m.mult : ''}` : `Pot ${fmt(m.entry * 2)} FLIP${m.mult > 1 ? ' · ×' + m.mult : ''}`;
+  $('pot').textContent = m.ante ? `ON THE LINE: ${m.ante.mine.name} ⇄ ${m.ante.theirs.name}` : m.room.boss ? `WORLD BOSS · deal damage` : m.room.practice ? `PRACTICE · NO STAKES${m.mult > 1 ? ' · ×' + m.mult : ''}` : `Pot ${fmt(m.entry * 2)} FLIP${m.mult > 1 ? ' · ×' + m.mult : ''}`;
   $('pot').classList.toggle('doubled', m.mult > 1);
   // FLIP! call: button, answer panel, banner when it's accepted
   $('flipCall').hidden = !m.canCall;
@@ -841,6 +859,7 @@ $('lock').onclick = async () => {
 // ---------- result ----------
 function onMatchEnd(r) {
   clearInterval(timerT); S.match = null; lockTabs(false);
+  if (r.ante) refreshMe().catch(() => {}); // a card changed hands
   const oldElo = S.me.elo;
   S.me = r.profile; updateTop();
   setTimeout(() => {
@@ -863,6 +882,11 @@ function onMatchEnd(r) {
   } else if (r.practice) {
     rows.length = 0;
     rows.push(`<dt>Mode</dt><dd>Practice vs ${esc(S.cfg.botLevels[r.level].name)} bot</dd>`, `<dt class="tot">FLIP and ELO</dt><dd class="tot">Unchanged</dd>`);
+    r.out === 'win' ? SFX.win() : r.out === 'loss' ? SFX.lose() : null;
+  } else if (r.ante) {
+    rows.length = 0;
+    rows.push(`<dt>Your ante</dt><dd>${esc(r.ante.mine.name)}</dd>`, `<dt>Their ante</dt><dd>${esc(r.ante.theirs.name)}</dd>`,
+      r.out === 'win' ? `<dt class="tot">You won</dt><dd class="tot">${esc(r.ante.theirs.name)} is now yours</dd>` : r.out === 'loss' ? `<dt class="tot">You lost</dt><dd class="tot">${esc(r.ante.mine.name)} went to ${esc(r.opponent)}</dd>` : `<dt class="tot">Draw</dt><dd class="tot">Both keep their cards</dd>`);
     r.out === 'win' ? SFX.win() : r.out === 'loss' ? SFX.lose() : null;
   } else if (r.out === 'win') {
     rows.push(`<dt>Pot</dt><dd class="num">${fmt(r.pot)}</dd>`, `<dt>House fee</dt><dd class="num">−${fmt(r.rake)}</dd>`,

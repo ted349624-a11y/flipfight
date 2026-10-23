@@ -54,6 +54,9 @@ const ROOMS = [
   { id: 1, name: 'ROOM 1 · ROOKIE', stake: 20000, limit: 220, rake: 0.05 },
   { id: 2, name: 'ROOM 2 · VETERAN', stake: 100000, limit: 320, rake: 0.05 },
   { id: 3, name: 'ROOM 3 · LEGEND', stake: 500000, limit: null, rake: 0.04 }, // null = no cap
+  // Ante room: no FLIP entry. Each player puts one card from their deck on the line and is paired with someone
+  // who antes a card of the same rarity. The winner takes the loser's ante card. Ranked (ELO and clan points count).
+  { id: 4, name: 'ROOM 4 · ANTE', stake: 0, limit: null, rake: 0, ante: true },
 ];
 
 // World boss: one boss per weekly season, shared HP for the whole island. Everyone gets 3 free fights a day
