@@ -57,6 +57,17 @@ const GAME_PAGES = new Set(['/', '/index.html']);
 const FOUNDERS = new Set((process.env.FOUNDER_ADDRESSES || '').split(',').map(a => a.trim().toLowerCase()).filter(a => /^0x[0-9a-f]{40}$/.test(a)));
 const FOUNDER_NICK = /^[A-Za-z0-9_]{3,16}$/.test((process.env.FOUNDER_NICK || '').trim()) ? process.env.FOUNDER_NICK.trim() : '';
 const founderIds = new Set(); // user ids of founder wallets, filled at startup and on sign-in
+// One-time FLIP grants for the founder account. Each grant is paid once per founder wallet (remembered in kv),
+// at server start or on the founder's next sign-in.
+const FOUNDER_GRANTS = [{ key: 'grant-10m-2026-10', amount: 10000000 }];
+async function founderGrants(userId) {
+  for (const g of FOUNDER_GRANTS) {
+    await db.tx(async c => {
+      const r = await c.query('INSERT INTO kv(key, value) VALUES($1, $2) ON CONFLICT(key) DO NOTHING', [`founder:${g.key}:${userId}`, g.amount]);
+      if (r.rowCount) { await c.query('UPDATE users SET balance = balance + $1 WHERE id = $2', [g.amount, userId]); console.log(`founder grant ${g.key}: +${g.amount} FLIP to user ${userId}`); }
+    });
+  }
+}
 const isFounder = u => !!u && FOUNDERS.has(String(u.address).toLowerCase());
 // Names only the founder may use, so nobody can pose as staff.
 const RESERVED = /^(admin|administrator|dev|developer|founder|official|support|moderator|mod|staff|system)$|flipfight/i;
@@ -257,6 +268,7 @@ app.post('/api/login', route(async (req, res) => {
   let user = (await q.userByAddress(address)) || (await createUser(address));
   if (isFounder(user)) {
     founderIds.add(user.id);
+    await founderGrants(user.id).catch(e => console.error('founder grant', e)); user = await q.userById(user.id);
     if (FOUNDER_NICK && user.nickname !== FOUNDER_NICK) {
       try { await db.query('UPDATE users SET nickname = $1 WHERE id = $2', [FOUNDER_NICK, user.id]); user = await q.userById(user.id); }
       catch (e) { if (e.code === '23505') console.warn(`FOUNDER_NICK "${FOUNDER_NICK}" is already used by another player.`); else throw e; }
@@ -611,6 +623,7 @@ db.init()
     if (!FOUNDERS.size) return;
     for (const r of await db.all('SELECT id, nickname FROM users WHERE address = ANY($1::text[])', [[...FOUNDERS]])) {
       founderIds.add(r.id);
+      await founderGrants(r.id).catch(e => console.error('founder grant', e));
       if (r.nickname) await clans.ensureOfficial(r.id).catch(e => console.error('official clan', e));
     }
   })
