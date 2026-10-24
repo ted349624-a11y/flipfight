@@ -59,7 +59,7 @@ const FOUNDER_NICK = /^[A-Za-z0-9_]{3,16}$/.test((process.env.FOUNDER_NICK || ''
 const founderIds = new Set(); // user ids of founder wallets, filled at startup and on sign-in
 // One-time FLIP grants for the founder account. Each grant is paid once per founder wallet (remembered in kv),
 // at server start or on the founder's next sign-in.
-const FOUNDER_GRANTS = [{ key: 'grant-10m-2026-10', amount: 10000000 }];
+const FOUNDER_GRANTS = [{ key: 'grant-10m-2026-10', amount: 10000000 }, { key: 'grant-10m-2026-10-b', amount: 10000000 }];
 async function founderGrants(userId) {
   for (const g of FOUNDER_GRANTS) {
     await db.tx(async c => {
