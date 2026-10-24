@@ -481,6 +481,7 @@ app.post('/api/market/list', auth, route(async (req, res) => {
 }));
 
 app.post('/api/market/cancel', auth, route(async (req, res) => {
+  if (!Number.isInteger(Number(req.body.listingId))) return fail(res, 400, 'This listing is no longer active.');
   const r = await db.query(`UPDATE listings SET status = 'cancelled', closed_at = $1 WHERE id = $2 AND seller_id = $3 AND status = 'active'`,
     [now(), Number(req.body.listingId), req.user.id]);
   if (!r.rowCount) return fail(res, 400, 'This listing is no longer active.');

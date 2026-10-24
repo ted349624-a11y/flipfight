@@ -176,6 +176,14 @@ CREATE TABLE IF NOT EXISTS listings (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS listings_one_active_per_card ON listings(card_uid) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS listings_status ON listings(status, created_at);
+-- a card's old (sold / cancelled) listings must not stop it from being fused away: keep the listing, forget the card
+ALTER TABLE listings ALTER COLUMN card_uid DROP NOT NULL;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'listings_card_uid_fkey' AND confdeltype <> 'n') THEN
+    ALTER TABLE listings DROP CONSTRAINT listings_card_uid_fkey;
+    ALTER TABLE listings ADD CONSTRAINT listings_card_uid_fkey FOREIGN KEY (card_uid) REFERENCES cards(uid) ON DELETE SET NULL;
+  END IF;
+END $$;
 `;
 
 const init = () => pool.query(SCHEMA);
