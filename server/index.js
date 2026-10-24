@@ -32,7 +32,7 @@ const COMING_SOON = /^(on|true|1|yes)$/i.test(process.env.COMING_SOON || 'off');
 // X doesn't let a free site check these, so each task opens X and is ticked off when the player comes back.
 // X_HANDLE defaults to @flipfight (X_HANDLE=off switches the onboarding off).
 const X_HANDLE = /^(off|false|0|no)$/i.test((process.env.X_HANDLE || '').trim()) ? '' : ((process.env.X_HANDLE || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').replace(/\/.*$/, '') || 'flipfight');
-const X_TWEET_URL = (process.env.X_TWEET_URL || 'https://x.com/flipfight/status/2113907363640184900').trim(); // the post to like / repost / reply to
+const X_TWEET_URL = (process.env.X_TWEET_URL || 'https://x.com/flipfight/status/2113907998691053783').trim(); // the post to like / repost / reply to
 const X_TWEET_ID = (X_TWEET_URL.match(/status(?:es)?\/(\d+)/) || [])[1] || (/^\d+$/.test(X_TWEET_URL) ? X_TWEET_URL : '');
 // Without a post link the like / repost / reply tasks send players to the profile to use the latest post.
 const X_QUESTS = /^[A-Za-z0-9_]{1,15}$/.test(X_HANDLE) ? {
