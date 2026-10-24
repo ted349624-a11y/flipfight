@@ -59,14 +59,14 @@ const ROOMS = [
   { id: 4, name: 'ROOM 4 · ANTE', stake: 0, limit: null, rake: 0, ante: true },
 ];
 
-// World boss: one boss per weekly season, shared HP for the whole island. Everyone gets 3 free fights a day
+// World boss: one boss per weekly season, shared HP for the whole island. Everyone gets 15 free fights a day
 // (UTC). A fight is a match against the boss's own deck; your damage =
 //   10 x (total final power of your cards over the match) + 2,500 per round won + 10,000 for winning the match.
 // If the boss falls before the week ends, everyone who hit it gets 25,000 FLIP and the top 3 damage dealers get
 // 100,000 / 50,000 / 25,000 more and a permanent boss badge. Bosses rotate every week.
 const BOSS_ROOM = { id: 9, name: 'WORLD BOSS', stake: 0, limit: null, rake: 0 };
 const BOSS = {
-  hp: 250000, fightsPerDay: 3, energy: 20,
+  hp: 250000, fightsPerDay: 15, energy: 20,
   damage: { perPower: 10, perRound: 2500, win: 10000 },
   rewards: { all: 25000, top: [100000, 50000, 25000] },
   bosses: [

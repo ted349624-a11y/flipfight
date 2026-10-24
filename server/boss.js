@@ -1,4 +1,4 @@
-// Weekly world boss: shared HP, 3 fights a day per player, rewards when it falls.
+// Weekly world boss: shared HP, 15 fights a day per player, rewards when it falls.
 // The boss of a week belongs to the current season (same start and end).
 function createBoss({ db, G, io, seasons, clanOf = () => null, now = () => Date.now() }) {
   const B = G.BOSS;
