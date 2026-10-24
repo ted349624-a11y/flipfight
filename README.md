@@ -88,7 +88,7 @@ Siteye ilk gelen ziyaretçi, cüzdan bağlamadan **önce** bir kez X kullanıcı
 
 - `X_HANDLE`: takip edilecek hesap. Varsayılan `flipfight` (x.com/flipfight); kapatmak için `off`.
 - `X_TWEET_URL`: beğenilecek / repost edilecek / yanıtlanacak gönderinin linki. Varsayılan: https://x.com/flipfight/status/2113805867833233752 (ör. `https://x.com/flipfight/status/123…`). Boşsa beğeni / repost / yanıt görevleri profili açar ve oyuncudan son gönderiyi kullanmasını ister.
-- `X_REPLY_TEXT` (isteğe bağlı): yanıt kutusuna hazır gelen metin.
+- `X_REPLY_TEXT` (isteğe bağlı): yanıt kutusuna hazır gelen metin. Varsayılan boş; oyuncular yorumunu kendisi yazar.
 - Görevler X'in kendi sayfalarında açılır; oyuncu sekmeye geri döndüğünde işaretlenir. X ücretsiz olarak bu eylemleri doğrulatmaz (ücretli X API gerekir), bu yüzden kontrol güvene dayalıdır. Sunucu yine de her görevin işaretlenmesini, geçerli bir kullanıcı adını ve her X hesabının yalnızca bir oyuncuya bağlanmasını zorunlu tutar.
 
 "Coming soon" sayfası artık varsayılan olarak kapalı. Gerekirse `COMING_SOON=on` ile geri açılır (`PREVIEW_KEY` ile önizleme yine çalışır).

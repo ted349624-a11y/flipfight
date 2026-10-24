@@ -37,7 +37,7 @@ const X_TWEET_ID = (X_TWEET_URL.match(/status(?:es)?\/(\d+)/) || [])[1] || (/^\d
 // Without a post link the like / repost / reply tasks send players to the profile to use the latest post.
 const X_QUESTS = /^[A-Za-z0-9_]{1,15}$/.test(X_HANDLE) ? {
   handle: X_HANDLE, tweetId: X_TWEET_ID || null,
-  reply: (process.env.X_REPLY_TEXT || 'Flipping cards on the island! ⚔️ flipfight.fun').slice(0, 200),
+  reply: (process.env.X_REPLY_TEXT || '').slice(0, 200), // empty: players write their own reply
   tasks: ['follow', 'notify', 'like', 'repost', 'reply'],
 } : null;
 const needsX = u => !!X_QUESTS && !!u && !u.x_done_at && !isFounder(u);

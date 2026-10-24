@@ -419,7 +419,7 @@ function xqUrl(t) {
     notify: `https://x.com/${H}`,
     like: `https://x.com/intent/like?tweet_id=${x.tweetId}`,
     repost: `https://x.com/intent/retweet?tweet_id=${x.tweetId}`,
-    reply: `https://x.com/intent/post?in_reply_to=${x.tweetId}&text=${encodeURIComponent(x.reply || '')}`,
+    reply: `https://x.com/intent/post?in_reply_to=${x.tweetId}` + (x.reply ? `&text=${encodeURIComponent(x.reply)}` : ''),
   }[t];
 }
 const XQ_KEY = () => 'ff-xq';
