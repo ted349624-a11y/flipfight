@@ -173,7 +173,7 @@ const PACKS = [
 ];
 
 const ECONOMY = {
-  startBalance: 200000,
+  startBalance: 500000,
   startFreePacks: 2,
   dailyBonus: 25000,
   dailyBonusMs: 24 * 60 * 60 * 1000,

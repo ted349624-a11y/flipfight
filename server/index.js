@@ -617,7 +617,19 @@ setInterval(() => {
   db.query('DELETE FROM nonces WHERE expires_at < $1', [now()]).catch(() => {});
 }, 60 * 60 * 1000).unref();
 
+// One-time top-up when the starting balance went from 200,000 to 500,000: every player who already existed
+// gets the 300,000 FLIP difference once (remembered in kv). New sign-ins already start with 500,000.
+async function startBalanceTopUp() {
+  await db.tx(async c => {
+    const r = await c.query("INSERT INTO kv(key, value) VALUES('topup:start-500k', 300000) ON CONFLICT(key) DO NOTHING");
+    if (!r.rowCount) return;
+    const u = await c.query('UPDATE users SET balance = balance + 300000');
+    console.log(`start balance top-up: +300,000 FLIP to ${u.rowCount} players`);
+  });
+}
+
 db.init()
+  .then(() => startBalanceTopUp())
   .then(() => clans.load())
   .then(async () => {
     if (!FOUNDERS.size) return;

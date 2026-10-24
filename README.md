@@ -6,7 +6,7 @@ Pixel art NFT kart düellosu. Oyuncular herhangi bir EVM cüzdanıyla (MetaMask,
 
 - **Cüzdanla giriş (tüm EVM cüzdanları):** Oyuncu ücretsiz bir mesaj imzalar (işlem değil, gas yok). Sunucu imzayı doğrular ve 30 günlük oturum açar.
 - **Takma ad:** İlk girişte seçilir, benzersizdir ve değiştirilemez. Lider tablosunda bu görünür.
-- **Başlangıç paketi:** Her yeni oyuncuya 200.000 FLIP, 12 başlangıç kartı ve 2 ücretsiz paket.
+- **Başlangıç paketi:** Her yeni oyuncuya 500.000 FLIP (Ekim 2026'dan önce kayıt olanlara fark olan 300.000 FLIP bir kez eklendi), 12 başlangıç kartı ve 2 ücretsiz paket.
 - **Gerçek zamanlı PvP:** Oda kuyrukları, sunucu tarafında oynanan maçlar, 20 saniyelik tur süresi (süre dolarsa rastgele kart oynanır), sayfa yenilense bile maça geri dönme.
 - **Sunucu otoritesi:** Bakiye, kart sahipliği, paket açma (kriptografik rastgelelik), deste kuralları ve maç sonucu tamamen sunucuda hesaplanır. Tarayıcı sadece seçim gönderir.
 - **Ekonomi:** Giriş tutarı maç başında kilitlenir, kazanan havuzu alır. %5 komisyonun %40'ı yakılır, %40'ı hazineye, %20'si sezon havuzuna gider. Paket fiyatının yarısı yakılır.
