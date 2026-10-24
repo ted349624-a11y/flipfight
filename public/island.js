@@ -52,6 +52,13 @@ const SPAWN = { x: PLAZA_C.x * T + 8, y: (PLAZA_C.y + 3) * T + 4 };
 
 const map = [], solid = [], props = [], lights = [];
 const BOSS_SPOT = { id: 'boss', label: 'WORLD BOSS', sign: '#ff5d6c', door: null, exit: null, x: 0, y: 0, w: 112, h: 104 };
+// Where the boss shows up: 'sea' (rising next to the pier) or 'plaza' (standing in the boss court off the plaza).
+const TITAN_COURT = { x0: 28, x1: 33, y0: 12, y1: 18 };
+const TITAN = { cx: 31 * T + 8, feet: 16 * T + 14, solid: [[30, 14], [31, 14], [32, 14], [30, 15], [31, 15], [32, 15], [30, 16], [31, 16], [32, 16]] };
+const BOSS_LAYOUTS = {
+  plaza: { x: TITAN.cx - 42, y: TITAN.feet - 96, w: 84, h: 96, door: { x: TITAN.cx, y: 17 * T + 6 }, exit: { x: TITAN.cx, y: 18 * T + 6 },
+    base: TITAN.feet, cx: TITAN.cx, signY: TITAN.feet - 104, glowY: TITAN.feet - 62, focus: { x: TITAN.cx, y: TITAN.feet - 40 } },
+};
 (function buildMap() {
   const cx = MW / 2, cy = MH / 2 + .5;
   for (let y = 0; y < MH; y++) {
@@ -63,6 +70,8 @@ const BOSS_SPOT = { id: 'boss', label: 'WORLD BOSS', sign: '#ff5d6c', door: null
     }
   }
   for (let y = PLAZA_C.y - 2; y <= PLAZA_C.y + 3; y++) for (let x = PLAZA_C.x - 4; x <= PLAZA_C.x + 3; x++) map[y][x] = PLAZA;
+  // the boss court: a paved corner off the plaza's north-east where a land boss stands
+  for (let y = TITAN_COURT.y0; y <= TITAN_COURT.y1; y++) for (let x = TITAN_COURT.x0; x <= TITAN_COURT.x1; x++) map[y][x] = PLAZA;
   const setPath = (x, y) => { if (map[y][x] !== PLAZA && map[y][x] !== SHALLOW && map[y][x] !== DEEP) map[y][x] = PATH; };
   const path = (x0, y0, x1, y1) => {
     for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) setPath(x, y0);
@@ -75,12 +84,15 @@ const BOSS_SPOT = { id: 'boss', label: 'WORLD BOSS', sign: '#ff5d6c', door: null
   // the world boss rises from the sea next to the end of the pier; walking to the pier's end opens the boss screen
   BOSS_SPOT.door = { x: PLAZA_C.x * T + 8, y: (py + 3) * T + 6 }; BOSS_SPOT.exit = { x: PLAZA_C.x * T + 8, y: (py + 1) * T + 2 };
   BOSS_SPOT.x = (PLAZA_C.x + 1) * T + 18; BOSS_SPOT.y = (py + 1) * T - 40; // drawn at 2x: 112 x 104
+  Object.assign(BOSS_SPOT, { base: BOSS_SPOT.y + 98, cx: BOSS_SPOT.x + 60, signY: BOSS_SPOT.y - 8, glowY: BOSS_SPOT.y + 24, focus: { x: BOSS_SPOT.x + 30, y: BOSS_SPOT.y + 40 } });
+  BOSS_LAYOUTS.sea = { ...BOSS_SPOT };
   for (let y = py + 1; y < Math.min(MH, py + 4); y++) solid[y][PLAZA_C.x] = false;
   BUILDINGS.forEach(b => { for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) solid[y][x] = true; });
   for (let y = PLAZA_C.y - 1; y <= PLAZA_C.y; y++) for (let x = PLAZA_C.x - 1; x <= PLAZA_C.x; x++) solid[y][x] = true; // fountain
   solid[PLAZA_C.y - 2][PLAZA_C.x - 4] = true; // top-clan flagpole
   // lamp posts along the paths
-  const free = (x, y) => y > 0 && y < MH - 1 && x > 0 && x < MW - 1 && map[y][x] === GRASS && !solid[y][x];
+  const above = (x, y) => x >= TITAN_COURT.x0 - 1 && x <= TITAN_COURT.x1 + 1 && y >= TITAN_COURT.y0 - 3 && y < TITAN_COURT.y0; // room for the titan's head
+  const free = (x, y) => y > 0 && y < MH - 1 && x > 0 && x < MW - 1 && map[y][x] === GRASS && !solid[y][x] && !above(x, y);
   let n = 0;
   for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) {
     if (map[y][x] !== PATH) continue;
@@ -582,7 +594,8 @@ const BOSS_PAL = {
 };
 const bossSprites = new Map();
 // A sea serpent rising from the water, coloured by the boss's element. 54x50 plus outline.
-function bossSprite(el) {
+function bossSprite(el, id) {
+  if (id === 'titan') return titanSprite();
   if (bossSprites.has(el)) return bossSprites.get(el);
   const P = BOSS_PAL[el] || BOSS_PAL.water;
   const img = sprite(54, 50, c => {
@@ -603,8 +616,53 @@ function bossSprite(el) {
   bossSprites.set(el, img);
   return img;
 }
+function applyBoss(st) {
+  I.boss = st || null;
+  const spot = st && st.spot === 'plaza' ? 'plaza' : 'sea';
+  if (BOSS_LAYOUTS[spot]) Object.assign(BOSS_SPOT, BOSS_LAYOUTS[spot]);
+  const block = spot === 'plaza' && !st.killedAt; // the titan's body blocks its tiles while it stands
+  TITAN.solid.forEach(([x, y]) => { solid[y][x] = block; });
+}
+// The Iron Titan: an armoured giant with a molten core, standing in the plaza. 40x46 plus outline.
+let titanImg = null;
+function titanSprite() {
+  if (titanImg) return titanImg;
+  const I0 = '#5d6178', I1 = '#7c8199', I2 = '#a3a9c2', ID = '#3b3e52', M0 = '#ff8a3a', M1 = '#ffcc33', M2 = '#fff3c4', R = '#c4401a';
+  titanImg = sprite(40, 46, c => {
+    // legs and feet
+    px(c, ID, 11, 33, 7, 10); px(c, ID, 22, 33, 7, 10); px(c, I0, 12, 33, 5, 9); px(c, I0, 23, 33, 5, 9);
+    px(c, I1, 9, 42, 10, 4); px(c, I1, 21, 42, 10, 4); px(c, ID, 9, 45, 10, 1); px(c, ID, 21, 45, 10, 1);
+    px(c, I2, 12, 36, 2, 2); px(c, I2, 25, 36, 2, 2); // knee plates
+    // arms and fists
+    px(c, I0, 2, 20, 7, 15); px(c, I0, 31, 20, 7, 15); px(c, ID, 2, 27, 7, 1); px(c, ID, 31, 27, 7, 1);
+    px(c, I1, 1, 34, 9, 7); px(c, I1, 30, 34, 9, 7); px(c, ID, 1, 40, 9, 1); px(c, ID, 30, 40, 9, 1);
+    px(c, I2, 2, 35, 2, 2); px(c, I2, 36, 35, 2, 2);
+    // torso
+    px(c, I0, 8, 15, 24, 19); px(c, I1, 10, 15, 20, 4); px(c, ID, 8, 30, 24, 3); px(c, M1, 19, 31, 2, 1); // belt and buckle
+    px(c, ID, 8, 15, 2, 15); px(c, ID, 30, 15, 2, 15);
+    // molten core and cracks
+    px(c, R, 16, 19, 8, 8); px(c, M0, 17, 20, 6, 6); px(c, M1, 18, 21, 4, 4); px(c, M2, 19, 22, 2, 2);
+    px(c, M0, 12, 24, 4, 1); px(c, M0, 11, 25, 1, 3); px(c, M0, 24, 22, 4, 1); px(c, M0, 27, 23, 1, 4);
+    // shoulder plates with rivets
+    px(c, I1, 0, 13, 12, 8); px(c, I1, 28, 13, 12, 8); px(c, I2, 1, 13, 10, 2); px(c, I2, 29, 13, 10, 2); px(c, ID, 0, 20, 12, 1); px(c, ID, 28, 20, 12, 1);
+    for (const x of [2, 5, 8, 30, 33, 36]) px(c, M1, x, 17, 1, 1);
+    // head: helmet, horns, glowing visor
+    px(c, I1, 14, 4, 12, 11); px(c, I2, 15, 2, 10, 3); px(c, ID, 14, 13, 12, 2);
+    px(c, R, 11, 0, 3, 7); px(c, R, 26, 0, 3, 7); px(c, M0, 11, 0, 3, 2); px(c, M0, 26, 0, 3, 2); // horns
+    px(c, ID, 15, 8, 10, 3); px(c, M1, 16, 9, 3, 1); px(c, M1, 21, 9, 3, 1); px(c, M2, 17, 9, 1, 1); px(c, M2, 22, 9, 1, 1);
+    px(c, I2, 19, 4, 2, 3); // crest
+  });
+  return titanImg;
+}
 function drawBoss(c, t, st) {
   if (!st || st.killedAt) return;
+  if (st.spot === 'plaza') {
+    const img = titanSprite(), breathe = reduced ? 0 : Math.round(Math.sin(t * 1.2)) * 2;
+    c.fillStyle = 'rgba(11,9,22,.35)'; c.fillRect(TITAN.cx - 40, TITAN.feet - 4, 80, 8); // shadow
+    c.drawImage(img, BOSS_SPOT.x, BOSS_SPOT.y + breathe, img.width * 2, img.height * 2 - breathe);
+    if (!reduced) for (let i = 0; i < 6; i++) { const ph = (t * .6 + i / 6) % 1; px(c, ph < .5 ? '#ffcc33' : '#ff8a3a', TITAN.cx - 6 + Math.round(Math.sin(t * 2 + i * 1.7) * 10), TITAN.feet - 58 - ph * 40, 1, 1); } // embers from the core
+    return;
+  }
   const bob = reduced ? 0 : Math.round(Math.sin(t * 1.4) * 2) * 2, x = BOSS_SPOT.x, y = BOSS_SPOT.y + bob;
   const img = bossSprite(st.el);
   c.drawImage(img, x, y, img.width * 2, img.height * 2);
@@ -808,7 +866,7 @@ function renderWorld(now, V) {
   const items = sortables.filter(s => s.x < cx + vw + 40 && s.x + s.img.width > cx - 40 && s.y < cy + vh + 40 && s.y + s.img.height > cy - 60);
   chars.forEach(p => items.push({ char: p, base: p.y }));
   items.push({ flag: true, base: FLAGPOLE.y });
-  if (BOSS_SPOT.door) items.push({ boss: true, base: BOSS_SPOT.y + 98 });
+  if (BOSS_SPOT.door) items.push({ boss: true, base: BOSS_SPOT.base });
   items.sort((a, b) => a.base - b.base);
   for (const it of items) { if (it.char) drawChar(c, it.char); else if (it.flag) drawFlagpole(c, t, V.topClan); else if (it.boss) drawBoss(c, t, I.boss); else c.drawImage(it.img, it.x, it.y); }
   // fountain water spray and forge smoke
@@ -837,7 +895,7 @@ function renderWorld(now, V) {
   }
   if (V.glowAt) glow(V.glowAt.x - cx, V.glowAt.y - cy - 8, 40, [180, 170, 220], .35); // a little light around you
   glow(FLAGPOLE.x + 14 - cx, FLAGPOLE.y - 44 - cy, 36, V.topClan && V.topClan.banner.special ? [255, 215, 130] : [220, 210, 255], .55); // the plaza flag is lit
-  if (I.boss && !I.boss.killedAt && BOSS_SPOT.door) glow(BOSS_SPOT.x + 60 - cx, BOSS_SPOT.y + 24 - cy, 70 + Math.sin(t * 2) * 8, [255, 90, 90], .5); // the boss's glare
+  if (I.boss && !I.boss.killedAt && BOSS_SPOT.door) glow(BOSS_SPOT.cx - cx, BOSS_SPOT.glowY - cy, 70 + Math.sin(t * 2) * 8, I.boss.spot === 'plaza' ? [255, 150, 60] : [255, 90, 90], .5); // the boss's glare
   for (const p of chars) if (p.founder) glow(p.x - cx, p.y - cy - 10, 34 + Math.sin(t * 2.4) * 4, [255, 200, 90], .55); // royal aura
   if (!reduced) flies.forEach(f => { const x = f.x - cx, y = f.y - cy; if (Math.sin(f.ph * 2) > 0) glow(x, y, 7, [200, 255, 120], .5); });
   c.globalCompositeOperation = 'multiply'; c.drawImage(V.light, 0, 0);
@@ -854,7 +912,7 @@ function renderWorld(now, V) {
   c.restore();
 }
 function drawBossSign(c, st) {
-  const sx = BOSS_SPOT.x + 60, sy = BOSS_SPOT.y - 10;
+  const sx = BOSS_SPOT.cx, sy = BOSS_SPOT.signY - 2;
   const label = st.killedAt ? 'DEFEATED' : st.name.toUpperCase(), w = Math.max(64, Math.round(c.measureText(label).width + 12));
   px(c, OUT, sx - w / 2 - 1, sy - 12, w + 2, 24); px(c, '#2a1020', sx - w / 2, sy - 11, w, 22);
   c.fillStyle = st.killedAt ? '#9d96c6' : '#ff5d6c'; c.fillText(label, sx, sy);
@@ -916,7 +974,7 @@ function drawLabels(now, chars, cx, cy) {
   // the boss: name and health bar
   const st = I.boss;
   if (st && BOSS_SPOT.door) {
-    const sx = X(BOSS_SPOT.x + 60), sy = Y(BOSS_SPOT.y - 8);
+    const sx = X(BOSS_SPOT.cx), sy = Y(BOSS_SPOT.signY);
     if (sx > -200 && sx < cssW + 200 && sy > -60 && sy < cssH + 60) {
       const label = st.killedAt ? 'DEFEATED' : st.name.toUpperCase();
       u.font = font(fs);
@@ -972,7 +1030,7 @@ const MOODS = {
 };
 const BD = { canvas: null, ctx: null, light: null, lctx: null, focus: 'plaza', mood: 'calm', vw: 0, vh: 0, scale: 3, cam: null, flies: [], parts: [], npcs: [], raf: 0, last: 0, on: false };
 function focusPoint(id) {
-  if (id === 'boss' && BOSS_SPOT.door) return { x: BOSS_SPOT.x + 30, y: BOSS_SPOT.y + 40 };
+  if (id === 'boss' && BOSS_SPOT.door) return BOSS_SPOT.focus;
   const b = BUILDINGS.find(x => x.id === id);
   return b ? { x: b.door.x, y: b.door.y - b.h * T * .45 } : { x: PLAZA_C.x * T, y: PLAZA_C.y * T + 8 };
 }
@@ -1096,7 +1154,7 @@ function enterChannel(ch) {
   if (!I.socket || !I.me) return;
   I.socket.emit('island:enter', { x: Math.round(I.me.x), y: Math.round(I.me.y), channel: ch || undefined }, r => {
     if (!r || !r.ok || !I.mounted) return;
-    I.channel = r.channel; I.cap = r.cap; I.topClan = r.topClan || null; if (r.boss) I.boss = r.boss;
+    I.channel = r.channel; I.cap = r.cap; I.topClan = r.topClan || null; if (r.boss) applyBoss(r.boss);
     applyFull(r.players, I.me.id);
   });
 }
@@ -1169,7 +1227,7 @@ window.Island = {
   zoom(n) { I.zoom = n || 0; resize(); },
   setClanColors(cols) { if (Array.isArray(cols) && cols.length) { CLAN_COLORS = cols; bannerCache.clear(); } },
   setTopClan(cl) { I.topClan = cl || null; },
-  setBoss(st) { I.boss = st || null; },
+  setBoss(st) { applyBoss(st); },
   bossSprite,
   bannerSprite, bannerBig, symbols: SYMBOL_IDS,
   channels(cb) { if (I.socket) I.socket.emit('island:channels', r => cb(r && r.ok ? r : null)); else cb(null); },

@@ -2,20 +2,39 @@
 // The boss of a week belongs to the current season (same start and end).
 function createBoss({ db, G, io, seasons, clanOf = () => null, now = () => Date.now() }) {
   const B = G.BOSS;
-  const MAX_HP = Number(process.env.BOSS_HP) || B.hp;
+  const hpOf = b => b.hp || Number(process.env.BOSS_HP) || B.hp;
   let cur = null; // { season, boss, maxHp, hp, killedAt, endsAt }
   const day = (t = now()) => new Date(t).toISOString().slice(0, 10);
 
+  // B.startNow: put that boss in place of the current week's boss, once (remembered in kv)
+  let forced = !B.startNow;
+  async function forceStart(season) {
+    if (forced) return;
+    forced = true;
+    const b = B.bosses.find(x => x.id === B.startNow);
+    if (!b) return;
+    await db.tx(async c => {
+      const r = await db.query('INSERT INTO kv(key, value) VALUES($1, $2) ON CONFLICT(key) DO NOTHING', ['boss-now:' + b.id, season.number], c);
+      if (!r.rowCount) return;
+      await db.query(`INSERT INTO bosses(season, boss, max_hp, hp) VALUES($1,$2,$3,$3)
+        ON CONFLICT (season) DO UPDATE SET boss = EXCLUDED.boss, max_hp = EXCLUDED.max_hp, hp = EXCLUDED.hp, killed_at = NULL, killer_id = NULL`, [season.number, b.id, hpOf(b)], c);
+      await db.query('DELETE FROM boss_hits WHERE season = $1', [season.number], c);
+      await db.query('DELETE FROM boss_attempts WHERE day = $1', [day()], c);
+      console.log(`boss: ${b.name} (${hpOf(b)} HP) now in place for season ${season.number}`);
+    });
+  }
+
   async function load() {
     const season = seasons.current() || await seasons.load();
+    await forceStart(season);
     let row = await db.one('SELECT * FROM bosses WHERE season = $1', [season.number]);
     if (!row) row = await db.one(`INSERT INTO bosses(season, boss, max_hp, hp) VALUES($1,$2,$3,$3) ON CONFLICT (season) DO UPDATE SET season = EXCLUDED.season RETURNING *`,
-      [season.number, G.bossOf(season.number).id, MAX_HP]);
+      [season.number, G.bossOf(season.number).id, hpOf(G.bossOf(season.number))]);
     cur = { season: row.season, boss: G.BOSS.bosses.find(b => b.id === row.boss) || G.bossOf(row.season), maxHp: Number(row.max_hp), hp: Number(row.hp),
       killedAt: row.killed_at ? Number(row.killed_at) : null, endsAt: Number(season.ends_at) };
     return cur;
   }
-  const state = () => cur && { season: cur.season, id: cur.boss.id, name: cur.boss.name, el: cur.boss.el, maxHp: cur.maxHp, hp: cur.hp, killedAt: cur.killedAt, endsAt: cur.endsAt };
+  const state = () => cur && { season: cur.season, id: cur.boss.id, name: cur.boss.name, el: cur.boss.el, spot: cur.boss.spot || 'sea', maxHp: cur.maxHp, hp: cur.hp, killedAt: cur.killedAt, endsAt: cur.endsAt };
   const broadcast = () => io.to('w:boss').to('island').emit('boss:update', state()); // only the boss screen and the island show it
 
   async function attemptsUsed(userId) {

@@ -133,7 +133,9 @@ Her kart kendi geçmişini tutar: ranked maçlarda oynadığı ve kazandığı t
 
 ## Haftalık dünya boss'u
 
-Her sezon (hafta) iskelenin yanında denizden bir boss yükselir (Leviathan, Infernal Wyrm, Stone Colossus, Tempest Roc sırayla). Can barı tüm ada için ortaktır. Herkesin günde 3 ücretsiz dövüş hakkı var (UTC); hasar = 10 × kartlarının toplam gücü + kazanılan tur başına 2.500 + maçı kazanırsan 10.000. Boss hafta bitmeden düşerse vuran herkes 25.000 FLIP, en çok hasar veren ilk 3 ayrıca 100.000 / 50.000 / 25.000 FLIP ve kalıcı ☠ rozeti alır. Boss canı `BOSS_HP` ortam değişkeniyle ayarlanır (varsayılan 250.000). Adada iskelenin ucuna yürü ya da BOSS sekmesini aç. Test: `node scripts/boss-test.js <url> <previewKey>`.
+Her sezon (hafta) iskelenin yanında denizden bir boss yükselir (Leviathan, Infernal Wyrm, Stone Colossus, Tempest Roc sırayla). Can barı tüm ada için ortaktır. Herkesin günde 3 ücretsiz dövüş hakkı var (UTC); hasar = 10 × kartlarının toplam gücü + kazanılan tur başına 2.500 + maçı kazanırsan 10.000. Boss hafta bitmeden düşerse vuran herkes 25.000 FLIP, en çok hasar veren ilk 3 ayrıca 100.000 / 50.000 / 25.000 FLIP ve kalıcı ☠ rozeti alır. Boss canı `BOSS_HP` ortam değişkeniyle ayarlanır (varsayılan 250.000). Adada iskelenin ucuna yürü ya da BOSS sekmesini aç.
+
+**The Iron Titan:** Meydanın kuzeydoğusundaki taş avluda duran, erimiş çekirdekli zırhlı dev (ateş). Canı 1.500.000 (`BOSS_HP`'den bağımsız). Bu sürüm yayına girince o haftanın boss'unun yerine bir kez geçer: can dolu başlar, haftalık hasar tablosu ve günün dövüş hakları sıfırlanır. Sonraki haftalarda diğer boss'larla sırayla gelir. Önüne yürüyünce boss ekranı açılır. `shared/game.js` içindeki `BOSS.startNow` bir boss'u o haftaya hemen koymak için kullanılır. Test: `node scripts/boss-test.js <url> <previewKey>`.
 
 ## Ante odası (Oda 4)
 

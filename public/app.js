@@ -1576,7 +1576,7 @@ function drawBossHero(clockOnly) {
   const h = Math.floor(left / 3600000), mi = Math.floor(left / 60000) % 60;
   $('bossNote').textContent = b.killedAt ? 'Defeated! A new boss comes with the next season.' : `${d.hitters} player${d.hitters === 1 ? '' : 's'} fighting · escapes in ${Math.floor(h / 24)}d ${h % 24}h ${mi}m`;
   if (clockOnly) return;
-  const cv = $('bossArt'), x = cv.getContext('2d'), img = Island.bossSprite(b.el);
+  const cv = $('bossArt'), x = cv.getContext('2d'), img = Island.bossSprite(b.el, b.id);
   cv.width = img.width; cv.height = img.height; x.imageSmoothingEnabled = false; x.clearRect(0, 0, cv.width, cv.height); x.drawImage(img, 0, 0);
   $('bossTag').textContent = `WORLD BOSS · WEEK ${b.season} · ${elName(b.el)}`;
   $('bossName').textContent = b.name;
