@@ -75,10 +75,11 @@ const BOSS = {
     { id: 'colossus', name: 'Stone Colossus', el: 'earth', cards: ['Granite Fist', 'Quake Stomp', 'Moss Shoulder', 'Boulder Heart', 'Pebble Swarm'] },
     { id: 'roc', name: 'Tempest Roc', el: 'wind', cards: ['Storm Talon', 'Gale Wing', 'Thunder Cry', 'Sky Dive', 'Feather Storm'] },
     // stands in the plaza instead of rising from the sea; much tougher
-    { id: 'titan', name: 'The Iron Titan', el: 'fire', hp: 1500000, spot: 'plaza', cards: ['Molten Core', 'Iron Fist', 'Rivet Storm', 'Furnace Gaze', 'Slag Stomp'] },
+    { id: 'titan', name: 'The Iron Titan', el: 'fire', hp: 5000000, spot: 'plaza', cards: ['Molten Core', 'Iron Fist', 'Rivet Storm', 'Furnace Gaze', 'Slag Stomp'] },
   ],
-  // this boss replaces the current week's boss once (fresh HP, fresh leaderboard, today's fights reset)
-  startNow: 'titan',
+  // put this boss in place of the current week's boss once per key (fresh HP, fresh leaderboard, today's fights reset).
+  // A new key brings it back again (titan-2: the Titan returns with 5,000,000 HP after it fell).
+  startNow: { id: 'titan', key: 'titan-2' },
 };
 const bossOf = seasonNumber => BOSS.bosses[(Math.max(1, seasonNumber) - 1) % BOSS.bosses.length];
 // The boss's five cards: its element on the front, the other elements (with abilities) on the back.

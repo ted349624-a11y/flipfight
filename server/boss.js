@@ -11,10 +11,11 @@ function createBoss({ db, G, io, seasons, clanOf = () => null, now = () => Date.
   async function forceStart(season) {
     if (forced) return;
     forced = true;
-    const b = B.bosses.find(x => x.id === B.startNow);
+    const S = typeof B.startNow === 'string' ? { id: B.startNow, key: B.startNow } : B.startNow;
+    const b = B.bosses.find(x => x.id === S.id);
     if (!b) return;
     await db.tx(async c => {
-      const r = await db.query('INSERT INTO kv(key, value) VALUES($1, $2) ON CONFLICT(key) DO NOTHING', ['boss-now:' + b.id, season.number], c);
+      const r = await db.query('INSERT INTO kv(key, value) VALUES($1, $2) ON CONFLICT(key) DO NOTHING', ['boss-now:' + S.key, season.number], c);
       if (!r.rowCount) return;
       await db.query(`INSERT INTO bosses(season, boss, max_hp, hp) VALUES($1,$2,$3,$3)
         ON CONFLICT (season) DO UPDATE SET boss = EXCLUDED.boss, max_hp = EXCLUDED.max_hp, hp = EXCLUDED.hp, killed_at = NULL, killer_id = NULL`, [season.number, b.id, hpOf(b)], c);
