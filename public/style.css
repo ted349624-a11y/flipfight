@@ -723,3 +723,16 @@ img.royal{filter:drop-shadow(0 0 6px rgba(255,204,51,.55));animation:royalGlow 3
 .xq-bar{width:100%;max-width:440px;height:10px;box-shadow:0 0 0 3px var(--line)}
 .xq-bar i{display:block;height:100%;width:0;background:#5fd38d;transition:width .3s}
 @media (max-width:520px){.xq-t{font-size:17px}.xq-task{gap:8px;padding:8px}.xq-task a.btn{min-width:72px}}
+
+/* admin (founder only) */
+nav.tabs button.tab-admin:not([aria-selected="true"]){color:var(--gold)}
+.adm-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:12px 0 16px}
+.adm-tile{padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.adm-tile b{font-family:var(--font-px);font-size:16px;font-weight:400;color:var(--gold)}
+.adm-tile span{font-size:18px;color:var(--muted)}
+.adm-tools{display:flex;gap:10px;flex-wrap:wrap;padding:10px;margin-bottom:12px}
+.adm-tools input{flex:1;min-width:180px}
+.adm-sub{display:block;font-size:15px;color:var(--muted)}
+.adm-pager{display:flex;gap:14px;align-items:center;justify-content:center;margin:14px 0}
+.adm-pager span{font-family:var(--font-px);font-size:10px}
+@media (max-width:520px){.adm-stats{grid-template-columns:repeat(2,1fr);gap:8px}.adm-tile b{font-size:13px}.adm-tile span{font-size:16px}}

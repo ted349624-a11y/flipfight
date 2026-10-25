@@ -78,6 +78,7 @@
     <button role="tab" data-tab="clans" aria-selected="false">CLANS</button>
     <button role="tab" data-tab="boss" aria-selected="false" class="tab-boss">BOSS</button>
     <button role="tab" data-tab="history" aria-selected="false">HISTORY</button>
+    <button role="tab" data-tab="admin" aria-selected="false" class="tab-admin" hidden>★ ADMIN</button>
   </nav>
 
   <!-- ISLAND (home, full screen) -->
@@ -329,6 +330,20 @@
   </section>
 
   <!-- HISTORY -->
+  <section id="admin" hidden>
+    <h2>★ Admin</h2>
+    <p class="note">Only founder wallets can open this page.</p>
+    <div class="adm-stats" id="admStats"></div>
+    <div class="frame adm-tools">
+      <input id="admQ" placeholder="Search nickname or 0x address" autocomplete="off" spellcheck="false">
+      <select id="admSort" aria-label="Sort players">
+        <option value="balance">Most FLIP</option><option value="new">Newest</option><option value="elo">Highest ELO</option><option value="games">Most games</option>
+      </select>
+    </div>
+    <div class="frame tblwrap" id="admWrap"></div>
+    <div class="adm-pager"><button class="btn ghost" type="button" id="admPrev">‹ Prev</button><span id="admPage"></span><button class="btn ghost" type="button" id="admNext">Next ›</button></div>
+  </section>
+
   <section id="history" hidden>
     <h2>Your last matches</h2>
     <div class="frame tblwrap" id="histWrap"></div>

@@ -153,6 +153,10 @@ Kurucu cüzdanı ilk kez nick'iyle bağlandığında (ya da sunucu açılışın
 
 Bu cüzdan bağlanınca: taçlı, pelerinli kraliyet karakteri, etrafında altın parıltılar, adada kırmızı-altın isim plakası ve her yerde ★ FOUNDER rozeti. `FOUNDER_NICK` girildiyse hesabın nicki girişte otomatik o olur ve bu isim başkasına kapanır. "admin", "dev", "founder", içinde "flipfight" geçen isimler gibi resmi görünen nickler de sadece kurucuya açık.
 
+## Admin sayfası (sadece kurucu)
+
+Kurucu cüzdanıyla girince sekmelerde ve ada menüsünde **★ ADMIN** çıkar. Oyuncu sayısı, cüzdan sayısı, son 24 saat / 7 günde yeni gelenler, şu an online olanlar, bugün maç yapanlar, oyuncuların toplam FLIP'i, yakılan FLIP ve kasa görünür. Altında tüm oyuncular: FLIP, ELO, galibiyet-mağlubiyet, kart sayısı, katılma zamanı; nick veya 0x adresle aranabilir, FLIP / yeni / ELO / maç sayısına göre sıralanır. Başka biri `/api/admin` adresini denerse 404 alır.
+
 ## Ölçek ve trafik
 
 Render'ın ücretsiz planında aylık dahil trafik 5 GB, CPU 0.1. Trafiği düşük tutmak için:

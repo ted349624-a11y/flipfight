@@ -175,7 +175,7 @@ function backEl() { const d = document.createElement('div'); d.className = 'back
 function emptySlot(t) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = t; return d; }
 
 // ---------- screens ----------
-const SCREENS = ['login', 'nickname', 'xquests', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'clans', 'boss', 'history'];
+const SCREENS = ['login', 'nickname', 'xquests', 'island', 'arena', 'deck', 'queue', 'match', 'result', 'collection', 'forge', 'market', 'shop', 'ranks', 'clans', 'boss', 'history', 'admin'];
 let current = null;
 function show(id) {
   if (current !== id) window.scrollTo({ top: 0 });
@@ -222,13 +222,14 @@ function setTab(tab) {
   if (S.match) return;
   S.tab = tab;
   [...$('tabs').children].forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ({ island: renderIsland, arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, clans: renderClans, boss: renderBoss, history: renderHistory })[tab]();
+  ({ island: renderIsland, arena: renderArena, collection: renderCollection, forge: renderForge, market: renderMarket, shop: renderShop, ranks: renderRanks, clans: renderClans, boss: renderBoss, history: renderHistory, admin: renderAdmin })[tab]();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { SFX.click(); setTab(b.dataset.tab); } };
 function lockTabs(on) { [...$('tabs').children].forEach(b => { b.disabled = on; b.style.opacity = on ? .45 : 1; }); }
 
 function updateTop() {
   const p = S.me; if (!p) return;
+  document.querySelector('#tabs .tab-admin').hidden = !p.founder;
   $('bal').textContent = fmt(p.balance); $('elo').textContent = p.elo;
   if (S.cfg) $('tierTop').innerHTML = `${tierBadge(p.elo)}`;
   $('nick').textContent = (p.founder ? '★ ' : '') + (p.nickname || ''); $('addr').textContent = shortAddr(p.address);
@@ -564,7 +565,7 @@ function emit(ev, data) {
 }
 
 // ---------- island (home) ----------
-const BUILDING_TAB = { arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', clans: 'clans', boss: 'boss', history: 'history' };
+const BUILDING_TAB = { admin: 'admin', arena: 'arena', ranks: 'ranks', shop: 'shop', market: 'market', forge: 'forge', collection: 'collection', clans: 'clans', boss: 'boss', history: 'history' };
 let hintTimer = 0;
 function renderIsland() {
   show('island');
@@ -573,7 +574,7 @@ function renderIsland() {
     onEnter: id => { SFX.found(); setTab(BUILDING_TAB[id]); },
     onCount: (n, ch, cap) => { $('islandOnline').textContent = `● ISLAND #${ch || 1} · ${n}${cap ? '/' + cap : ''}`; },
   });
-  $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" data-b="${b.id}">${b.label}</button>`).join('') + '<button type="button" data-b="boss">WORLD BOSS</button>' +
+  $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" data-b="${b.id}">${b.label}</button>`).join('') + '<button type="button" data-b="boss">WORLD BOSS</button>' + (S.me && S.me.founder ? '<button type="button" data-b="admin">★ ADMIN</button>' : '') +
     '<hr><button type="button" data-act="sfx"></button><button type="button" class="muted" data-act="out">SIGN OUT</button>';
   closeIslandMenu(); updateTop();
   $('islandHint').classList.remove('gone'); clearTimeout(hintTimer); hintTimer = setTimeout(() => $('islandHint').classList.add('gone'), 6000);
@@ -1590,6 +1591,33 @@ function drawBossHero(clockOnly) {
   $('bossLeft').textContent = b.killedAt ? '' : `${left2} of ${d.rules.fightsPerDay} fights left today`;
 }
 $('bossFight').onclick = () => { SFX.click(); openDeck(S.cfg.bossRoom); };
+
+// ---------- admin (founder only) ----------
+const ADM = { page: 0, q: '', sort: 'balance', t: null };
+async function renderAdmin() {
+  if (!S.me || !S.me.founder) return setTab('island');
+  show('admin');
+  $('admWrap').innerHTML = '<p class="emptystate">Loading…</p>';
+  let d;
+  try { d = await api(`/api/admin?sort=${ADM.sort}&page=${ADM.page}&q=${encodeURIComponent(ADM.q)}`); }
+  catch (e) { $('admWrap').innerHTML = `<p class="emptystate">${esc(e.message)}</p>`; return; }
+  if (current !== 'admin') return;
+  const st = d.stats, tile = (v, l) => `<div class="frame adm-tile"><b class="num">${v}</b><span>${l}</span></div>`;
+  $('admStats').innerHTML = tile(fmt(st.players), 'players') + tile(fmt(st.accounts), 'wallets connected') + tile(fmt(st.new24h), 'new today (24h)') + tile(fmt(st.new7d), 'new this week') +
+    tile(fmt(st.onlineNow), 'online now') + tile(fmt(st.onIsland), 'on the island') + tile(fmt(st.active24h), 'played today') + tile(fmt(st.matches24h), 'matches today') +
+    tile(fmt(st.flip), 'FLIP held by players') + tile(fmt(st.burned), 'FLIP burned') + tile(fmt(st.treasury), 'treasury') + tile(fmt(st.xDone), 'did the X tasks');
+  const start = d.page * 50;
+  $('admWrap').innerHTML = d.players.length ? `<table class="lb adm"><thead><tr><th>#</th><th>Player</th><th class="r">FLIP</th><th class="r">ELO</th><th class="r">W-L-D</th><th class="r">Cards</th><th class="r">Joined</th></tr></thead><tbody>` +
+    d.players.map((p, i) => `<tr><td>${start + i + 1}</td><td>${clanFlag(p.clan)}${esc((p.founder ? '★ ' : '') + (p.nickname || '(no nick)'))}<small class="adm-sub">${esc(shortAddr(p.address))}${p.x ? ' · @' + esc(p.x) : ''}</small></td>` +
+      `<td class="r num gold">${fmt(p.balance)}</td><td class="r num">${p.elo}</td><td class="r num">${p.wins}-${p.losses}-${p.draws}</td><td class="r num">${p.cards}</td><td class="r">${ago(p.createdAt)}</td></tr>`).join('') + '</tbody></table>'
+    : '<p class="emptystate">No players found.</p>';
+  $('admPage').textContent = `Page ${d.page + 1}`;
+  $('admPrev').disabled = d.page === 0; $('admNext').disabled = !d.more;
+}
+$('admQ').oninput = () => { clearTimeout(ADM.t); ADM.t = setTimeout(() => { ADM.q = $('admQ').value.trim(); ADM.page = 0; renderAdmin(); }, 350); };
+$('admSort').onchange = () => { ADM.sort = $('admSort').value; ADM.page = 0; renderAdmin(); };
+$('admPrev').onclick = () => { if (ADM.page > 0) { ADM.page--; renderAdmin(); } };
+$('admNext').onclick = () => { ADM.page++; renderAdmin(); };
 
 // ---------- history ----------
 async function renderHistory() {

@@ -557,6 +557,33 @@ app.get('/api/leaderboard', route(async (req, res) => {
   });
 }));
 
+// ---------- admin (founder wallets only) ----------
+// Player numbers and balances. Anyone else gets a plain 404, so the page doesn't even show it exists.
+app.get('/api/admin', auth, route(async (req, res) => {
+  if (!isFounder(req.user)) return fail(res, 404, 'Not found.');
+  const t = now(), DAY = 86400000;
+  const sort = { balance: 'balance DESC', elo: 'elo DESC', new: 'created_at DESC', games: '(wins + losses + draws) DESC' }[req.query.sort] || 'balance DESC';
+  const search = String(req.query.q || '').trim().slice(0, 42);
+  const page = Math.max(0, Math.min(1000, Number(req.query.page) || 0)), per = 50;
+  const where = search ? (/^0x[0-9a-f]{4,}/i.test(search) ? 'u.address LIKE $1' : 'u.nickname ILIKE $1') : 'u.nickname IS NOT NULL';
+  const params = search ? [/^0x/i.test(search) ? search.toLowerCase() + '%' : '%' + search.replace(/[%_\\]/g, '\\$&') + '%'] : [];
+  const rows = await db.all(`SELECT u.id, u.nickname, u.address, u.balance, u.elo, u.wins, u.losses, u.draws, u.created_at, u.x_username, u.clan_id,
+      (SELECT COUNT(*)::int FROM cards c WHERE c.owner_id = u.id) AS cards
+    FROM users u WHERE ${where} ORDER BY ${sort}, u.id LIMIT ${per + 1} OFFSET ${page * per}`, params);
+  const s = await db.one(`SELECT COUNT(*)::int AS accounts, COUNT(nickname)::int AS players,
+      COUNT(*) FILTER (WHERE created_at > $1)::int AS new24h, COUNT(*) FILTER (WHERE created_at > $2)::int AS new7d,
+      COALESCE(SUM(balance) FILTER (WHERE nickname IS NOT NULL), 0)::text AS flip, COUNT(x_done_at)::int AS xdone FROM users`, [t - DAY, t - 7 * DAY]);
+  const m = await db.one('SELECT COUNT(*)::int AS n FROM matches WHERE created_at > $1', [t - DAY]);
+  const active = await db.one('SELECT COUNT(DISTINCT p)::int AS n FROM (SELECT p1 AS p FROM matches WHERE created_at > $1 UNION SELECT p2 FROM matches WHERE created_at > $1) x', [t - DAY]);
+  res.json({
+    stats: { accounts: s.accounts, players: s.players, new24h: s.new24h, new7d: s.new7d, flip: Number(s.flip), xDone: s.xdone,
+      matches24h: m.n, active24h: active.n, onlineNow: matchmaker.onlineCount(), onIsland: island.count(), burned: await db.getStat('burned'), treasury: await db.getStat('treasury') },
+    players: rows.slice(0, per).map(r => ({ id: r.id, nickname: r.nickname, address: r.address, balance: Number(r.balance), elo: r.elo, wins: r.wins, losses: r.losses, draws: r.draws,
+      cards: r.cards, createdAt: Number(r.created_at), x: r.x_username, clan: clans.clanOf(r.clan_id), founder: founderIds.has(r.id) })),
+    page, more: rows.length > per,
+  });
+}));
+
 app.get('/api/history', auth, route(async (req, res) => {
   const me = req.user.id;
   const rows = await db.all(`SELECT m.*, u1.nickname AS n1, u2.nickname AS n2 FROM matches m
