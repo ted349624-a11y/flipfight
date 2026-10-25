@@ -41,6 +41,11 @@ const X_QUESTS = /^[A-Za-z0-9_]{1,15}$/.test(X_HANDLE) ? {
   tasks: ['follow', 'notify', 'like', 'repost', 'reply'],
 } : null;
 const needsX = u => !!X_QUESTS && !!u && !u.x_done_at && !isFounder(u);
+// Moving announcement across the island (ANNOUNCE=off hides it; ANNOUNCE_URL is opened when it's tapped).
+const ANNOUNCE = /^(off|false|0|no)$/i.test((process.env.ANNOUNCE || '').trim()) ? null : {
+  text: ((process.env.ANNOUNCE || '').trim() || '$FLIP live in 2 hours · Check x.com/FlipfightRH').slice(0, 200),
+  url: (process.env.ANNOUNCE_URL || 'https://x.com/FlipfightRH').trim(),
+};
 const X_FREE = new Set(['/api/me', '/api/x-quests', '/api/logout', '/api/nickname']);
 const PREVIEW_KEY = (process.env.PREVIEW_KEY || '').trim();
 const PREVIEW_COOKIE = 'ff_preview';
@@ -289,7 +294,7 @@ app.post('/api/logout', auth, route(async (req, res) => {
 // ---------- profile ----------
 app.get('/api/config', (req, res) => {
   res.json({ season: G.SEASON, tiers: G.TIERS, rewards: Array.from({ length: G.SEASON.paidPlaces }, (_, i) => G.seasonReward(i + 1)), market: G.MARKET, fusion: G.FUSION, practice: G.PRACTICE, botLevels: G.BOT_LEVELS, elements: G.ELEMENTS, rarities: G.RARITIES, rooms: G.ROOMS, packs: G.PACKS, match: G.MATCH, economy: { dailyBonus: G.ECONOMY.dailyBonus, feeSplit: G.ECONOMY.feeSplit },
-    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, xQuests: X_QUESTS, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM, clan: G.CLAN, bossRoom: G.BOSS_ROOM, bosses: G.BOSS.bosses.map(b => ({ id: b.id, name: b.name, el: b.el })) });
+    walletConnectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim() || null, chainId: G.CHAIN_ID, xQuests: X_QUESTS, announce: ANNOUNCE, abilities: G.ABILITIES, abilityNum: G.ABILITY_NUM, clan: G.CLAN, bossRoom: G.BOSS_ROOM, bosses: G.BOSS.bosses.map(b => ({ id: b.id, name: b.name, el: b.el })) });
 });
 
 app.get('/api/me', auth, route(async (req, res) => {

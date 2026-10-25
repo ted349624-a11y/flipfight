@@ -574,6 +574,9 @@ function renderIsland() {
     onEnter: id => { SFX.found(); setTab(BUILDING_TAB[id]); },
     onCount: (n, ch, cap) => { $('islandOnline').textContent = `● ISLAND #${ch || 1} · ${n}${cap ? '/' + cap : ''}`; },
   });
+  const ann = S.cfg && S.cfg.announce;
+  $('ticker').hidden = !ann;
+  if (ann) { $('tickerText').textContent = `★ ${ann.text} ★`; $('ticker').href = ann.url || '#'; $('ticker').title = ann.text; }
   $('islandQuick').innerHTML = Island.BUILDINGS.map(b => `<button type="button" data-b="${b.id}">${b.label}</button>`).join('') + '<button type="button" data-b="boss">WORLD BOSS</button>' + (S.me && S.me.founder ? '<button type="button" data-b="admin">★ ADMIN</button>' : '') +
     '<hr><button type="button" data-act="sfx"></button><button type="button" class="muted" data-act="out">SIGN OUT</button>';
   closeIslandMenu(); updateTop();
