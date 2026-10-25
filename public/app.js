@@ -377,6 +377,17 @@ function signOut(expired, msg) {
   renderLogin(msg || (expired ? 'Your session ended. Please sign in again.' : ''));
 }
 $('logout').onclick = () => signOut(false);
+// $FLIP contract address on the sign-in screen: tap to copy
+$('caBox').onclick = async () => {
+  const ca = $('caBox').dataset.ca;
+  let ok = false;
+  try { await navigator.clipboard.writeText(ca); ok = true; } catch (e) {
+    try { const t = document.createElement('textarea'); t.value = ca; document.body.appendChild(t); t.select(); ok = document.execCommand('copy'); t.remove(); } catch (e2) {}
+  }
+  $('caCopy').textContent = ok ? 'COPIED!' : 'COPY FAILED · LONG-PRESS TO SELECT';
+  $('caBox').classList.toggle('copied', ok); SFX.coin();
+  clearTimeout($('caBox')._t); $('caBox')._t = setTimeout(() => { $('caCopy').textContent = 'TAP TO COPY'; $('caBox').classList.remove('copied'); }, 2200);
+};
 
 // ---------- nickname ----------
 function renderNickname() {

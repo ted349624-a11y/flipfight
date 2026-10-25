@@ -736,3 +736,15 @@ nav.tabs button.tab-admin:not([aria-selected="true"]){color:var(--gold)}
 .adm-pager{display:flex;gap:14px;align-items:center;justify-content:center;margin:14px 0}
 .adm-pager span{font-family:var(--font-px);font-size:10px}
 @media (max-width:520px){.adm-stats{grid-template-columns:repeat(2,1fr);gap:8px}.adm-tile b{font-size:13px}.adm-tile span{font-size:16px}}
+
+/* $FLIP contract address on the sign-in screen */
+.ca-box{all:unset;box-sizing:border-box;cursor:pointer;width:100%;max-width:560px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 14px;
+  background:linear-gradient(180deg,#2a1d05,#1a1206);box-shadow:0 0 0 4px #ffcc33,0 0 0 8px #b8860b,0 0 28px 8px rgba(255,204,51,.45);animation:caGlow 1.6s ease-in-out infinite;text-align:center}
+.ca-box:focus-visible{outline:3px solid #8fe3ff;outline-offset:10px}
+.ca-label{font-family:var(--font-px);font-size:22px;color:#ffcc33;text-shadow:3px 3px 0 #0b0916,0 0 12px rgba(255,204,51,.8);letter-spacing:1px}
+.ca-addr{font-family:var(--font-px);font-size:11px;line-height:1.7;color:#fff3c4;word-break:break-all;user-select:all;-webkit-user-select:all;background:rgba(11,9,22,.6);padding:8px 10px;box-shadow:0 0 0 2px #b8860b}
+.ca-copy{font-family:var(--font-px);font-size:9px;color:#0b0916;background:#ffcc33;padding:6px 10px;box-shadow:0 3px 0 #b8860b}
+.ca-box.copied .ca-copy{background:#5fd38d;box-shadow:0 3px 0 #2f8a55}
+@keyframes caGlow{0%,100%{box-shadow:0 0 0 4px #ffcc33,0 0 0 8px #b8860b,0 0 18px 4px rgba(255,204,51,.35)}50%{box-shadow:0 0 0 4px #fff3c4,0 0 0 8px #ffcc33,0 0 36px 12px rgba(255,204,51,.6)}}
+@media (prefers-reduced-motion:reduce){.ca-box{animation:none}}
+@media (max-width:520px){.ca-label{font-size:18px}.ca-addr{font-size:10px}}
