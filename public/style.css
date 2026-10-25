@@ -748,3 +748,8 @@ nav.tabs button.tab-admin:not([aria-selected="true"]){color:var(--gold)}
 @keyframes caGlow{0%,100%{box-shadow:0 0 0 4px #ffcc33,0 0 0 8px #b8860b,0 0 18px 4px rgba(255,204,51,.35)}50%{box-shadow:0 0 0 4px #fff3c4,0 0 0 8px #ffcc33,0 0 36px 12px rgba(255,204,51,.6)}}
 @media (prefers-reduced-motion:reduce){.ca-box{animation:none}}
 @media (max-width:520px){.ca-label{font-size:18px}.ca-addr{font-size:10px}}
+.ca-buy{display:block;width:100%;max-width:560px;box-sizing:border-box;text-align:center;text-decoration:none;font-family:var(--font-px);font-size:14px;color:#0b0916;
+  background:#5fd38d;padding:14px 12px;box-shadow:0 0 0 4px #2f8a55,0 6px 0 4px #1e5c38;margin-top:4px}
+.ca-buy:hover,.ca-buy:focus-visible{background:#7ff0aa;outline:none}
+.ca-buy:active{transform:translateY(3px);box-shadow:0 0 0 4px #2f8a55,0 3px 0 4px #1e5c38}
+@media (max-width:520px){.ca-buy{font-size:11px}}
