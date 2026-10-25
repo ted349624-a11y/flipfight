@@ -86,7 +86,8 @@ node scripts/season-test.js http://localhost:3000 KEY play   # sezon maçları; 
 
 Siteye ilk gelen ziyaretçi, cüzdan bağlamadan **önce** bir kez X kullanıcı adını yazar ve 5 görevi yapar: takip et, bildirimleri aç 🔔, gönderiyi beğen, repost et, yanıt yaz. Sonra cüzdanını bağlar ve nickname seçer; görevler giriş anında hesabına kaydedilir ve bir daha sorulmaz. Kurucu hesabı bu adımı atlar.
 
-- `X_HANDLE`: takip edilecek hesap. Varsayılan `FlipfightRH` (x.com/FlipfightRH); kapatmak için `off`.
+- **Şu an kapalı:** yeni oyuncular doğrudan oynar. Tekrar açmak için Render'da `X_HANDLE=FlipfightRH` gir.
+- `X_HANDLE`: takip edilecek hesap. Boşsa X görevleri kapalı.
 - `X_TWEET_URL`: beğenilecek / repost edilecek / yanıtlanacak gönderinin linki. Varsayılan: https://x.com/FlipfightRH/status/2114117903532617739. Boşsa beğeni / repost / yanıt görevleri profili açar ve oyuncudan son gönderiyi kullanmasını ister.
 - `X_REPLY_TEXT` (isteğe bağlı): yanıt kutusuna hazır gelen metin. Varsayılan boş; oyuncular yorumunu kendisi yazar.
 - Görevler X'in kendi sayfalarında açılır; oyuncu sekmeye geri döndüğünde işaretlenir. X ücretsiz olarak bu eylemleri doğrulatmaz (ücretli X API gerekir), bu yüzden kontrol güvene dayalıdır. Sunucu yine de her görevin işaretlenmesini, geçerli bir kullanıcı adını ve her X hesabının yalnızca bir oyuncuya bağlanmasını zorunlu tutar.

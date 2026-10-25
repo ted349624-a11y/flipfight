@@ -30,8 +30,8 @@ const COMING_SOON = /^(on|true|1|yes)$/i.test(process.env.COMING_SOON || 'off');
 // One-time X (Twitter) onboarding: before playing, every account gives its X username and completes a few tasks
 // (follow, like, repost, reply, turn on notifications) on X_HANDLE's account and the X_TWEET_URL post.
 // X doesn't let a free site check these, so each task opens X and is ticked off when the player comes back.
-// X_HANDLE defaults to @FlipfightRH (X_HANDLE=off switches the onboarding off).
-const X_HANDLE = /^(off|false|0|no)$/i.test((process.env.X_HANDLE || '').trim()) ? '' : ((process.env.X_HANDLE || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').replace(/\/.*$/, '') || 'FlipfightRH');
+// Off unless X_HANDLE is set (e.g. X_HANDLE=FlipfightRH turns the onboarding back on).
+const X_HANDLE = /^(off|false|0|no)$/i.test((process.env.X_HANDLE || '').trim()) ? '' : (process.env.X_HANDLE || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').replace(/\/.*$/, '');
 const X_TWEET_URL = (process.env.X_TWEET_URL || 'https://x.com/FlipfightRH/status/2114117903532617739').trim(); // the post to like / repost / reply to
 const X_TWEET_ID = (X_TWEET_URL.match(/status(?:es)?\/(\d+)/) || [])[1] || (/^\d+$/.test(X_TWEET_URL) ? X_TWEET_URL : '');
 // Without a post link the like / repost / reply tasks send players to the profile to use the latest post.
