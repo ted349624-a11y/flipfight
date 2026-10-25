@@ -244,7 +244,7 @@ app.get('/api/nonce', route(async (req, res) => {
     '',
     'Sign in to Flipfight. This signature is free. It does not send a transaction or move any tokens.',
     '',
-    `URI: ${req.protocol}://${host}`,
+    `URI: ${/^(localhost|127\.|\[::1\])/.test(host) ? req.protocol : 'https'}://${host}`, // always https in production, even if a proxy hop reports http
     'Version: 1',
     `Chain ID: ${G.CHAIN_ID}`,
     `Nonce: ${crypto.randomBytes(12).toString('hex')}`,
